@@ -112,19 +112,29 @@ jobs:
           keyPassword=$KEYSTORE_ALIAS_PASSWORD
           EOF
 
-      - run: ./gradlew ${{ inputs.gradle-tasks }}
+      # Las entradas pasan por el entorno y no interpoladas dentro del script.
+      # Este workflow es publico y lo puede llamar cualquiera: interpolar texto
+      # ajeno en un `run:` seria inyeccion de shell, aunque solo se hiciera dano
+      # a si mismo. Sin comillas a proposito, para que las tareas se separen.
+      - name: Construir
+        env:
+          GRADLE_TASKS: ${{ inputs.gradle-tasks }}
+        run: ./gradlew $GRADLE_TASKS
 
       # Firmado con la clave de subida y no con la de debug. Comprobarlo es barato
       # y el fallo que atrapa es de los que Play solo cuenta despues de subir.
       - name: Verificar la firma
+        env:
+          AAB_PATH: ${{ inputs.aab-path }}
+          SIGNER_CN: ${{ inputs.signer-cn }}
         run: |
           set -euo pipefail
           # A fichero y no por tuberia a grep: grep -q sale pronto, jarsigner recibe
           # SIGPIPE y pipefail convertiria una comprobacion correcta en un build roto.
           # -verbose:summary y no -certs a secas: sin verbose, jarsigner imprime "jar
           # verified" y ni una linea de certificado, asi que el grep no encuentra nada.
-          jarsigner -verify -verbose:summary -certs '${{ inputs.aab-path }}' > signature.txt
-          grep -q '${{ inputs.signer-cn }}' signature.txt \
+          jarsigner -verify -verbose:summary -certs "$AAB_PATH" > signature.txt
+          grep -qF "$SIGNER_CN" signature.txt \
             || { echo "::error::bundle is not signed with the upload key"; exit 1; }
 
       # Antes de la accion de terceros, no despues. Esa accion recibe el mismo
