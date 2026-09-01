@@ -21,8 +21,22 @@ jobs:
     with:
       package-name: com.ejemplo.app
       whatsnew-dir: store/whatsnew
-    secrets: inherit
+    secrets:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
 ```
+
+Uno a uno y no `secrets: inherit`: los repositorios que llaman guardan tambien
+secretos de otras cosas (App Store Connect, Cloudflare, Supabase) que no pintan
+nada en una publicacion de Play.
+
+Si el build de la app genera configuracion a partir del entorno, se le pasan las
+variables por el secreto opcional `BUILD_ENV`, una `KEY=VALUE` por linea. Va como
+secreto y no como entrada porque las entradas aparecen en claro en el log, y el
+workflow las enmascara antes de exportarlas.
 
 Entradas: `package-name` (obligatoria), `signer-cn`, `java-version`,
 `gradle-tasks`, `aab-path`, `track`, `whatsnew-dir`. Los valores por defecto

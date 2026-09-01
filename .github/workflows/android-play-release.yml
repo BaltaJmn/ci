@@ -44,6 +44,11 @@ on:
         required: true
       PLAY_SERVICE_ACCOUNT_JSON:
         required: true
+      BUILD_ENV:
+        description: |
+          Variables que el build de la app necesita, una KEY=VALUE por linea.
+          Va como secreto y no como entrada porque las entradas salen en claro en el log.
+        required: false
 
 jobs:
   release:
@@ -64,6 +69,29 @@ jobs:
           java-version: ${{ inputs.java-version }}
 
       - uses: gradle/actions/setup-gradle@v4
+
+      # Generico a proposito: hay apps que generan configuracion en tiempo de build
+      # a partir del entorno y romperian aqui sin sus credenciales. El fichero
+      # compartido no tiene por que saber como se llaman.
+      # add-mask antes de escribir: lo que entra por GITHUB_ENV no lo enmascara
+      # GitHub solo, y estos logs son publicos.
+      - name: Variables de build de la app
+        env:
+          BUILD_ENV: ${{ secrets.BUILD_ENV }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # El contexto secrets no se puede usar en un `if:` de paso, asi que la
+          # comprobacion de "esta app no necesita nada" va aqui dentro.
+          [ -n "${BUILD_ENV:-}" ] || exit 0
+          while IFS= read -r line; do
+            case "$line" in ''|'#'*) continue;; esac
+            # Una variable declarada pero vacia no se enmascara ni se exporta: seria
+            # enmascarar la cadena vacia, que tapa el log entero.
+            [ -n "${line#*=}" ] || continue
+            echo "::add-mask::${line#*=}"
+            echo "$line" >> "$GITHUB_ENV"
+          done <<< "$BUILD_ENV"
 
       # Dos mecanismos de firma conviviendo a proposito: hay apps que leen
       # keystore.properties y otras que leen el entorno. Escribir las dos cosas
