@@ -1,0 +1,121 @@
+name: Android release to Play
+
+# Workflow reutilizable: no se dispara solo, lo llama el repositorio de cada app.
+# Aqui vive lo que costo depurar una vez y no merece la pena reescribir por app:
+# restaurar la clave, comprobar que el paquete sale firmado con ella y borrarla
+# antes de que corra la accion de terceros.
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: applicationId en Play
+        type: string
+        required: true
+      signer-cn:
+        description: Texto que tiene que aparecer en el certificado del paquete
+        type: string
+        default: CN=Baltasar
+      java-version:
+        type: string
+        default: '17'
+      gradle-tasks:
+        description: Tareas de Gradle que dejan el .aab construido
+        type: string
+        default: ':androidApp:bundleRelease'
+      aab-path:
+        type: string
+        default: androidApp/build/outputs/bundle/release/androidApp-release.aab
+      track:
+        description: Canal de Play. alpha es prueba cerrada, la que tiene testers de verdad.
+        type: string
+        default: alpha
+      whatsnew-dir:
+        description: Carpeta con un fichero whatsnew-<locale> por idioma. Vacio para no mandar notas.
+        type: string
+        default: ''
+    secrets:
+      KEYSTORE_BASE64:
+        required: true
+      KEYSTORE_PASSWORD:
+        required: true
+      KEY_ALIAS:
+        required: true
+      KEY_PASSWORD:
+        required: true
+      PLAY_SERVICE_ACCOUNT_JSON:
+        required: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    # Las variables van a nivel de job porque Gradle las lee en tiempo de
+    # configuracion, no dentro de una tarea concreta.
+    env:
+      KEYSTORE_PATH: upload.jks
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEYSTORE_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEYSTORE_ALIAS_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Dos mecanismos de firma conviviendo a proposito: hay apps que leen
+      # keystore.properties y otras que leen el entorno. Escribir las dos cosas
+      # cuesta cuatro lineas y evita tocar el Gradle de cada app.
+      # Si falta el secreto el build no rompe, firma con la clave de debug y sube
+      # basura, asi que se falla aqui y en voz alta.
+      - name: Restaurar la clave de subida
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_BASE64" || { echo "::error::KEYSTORE_BASE64 is empty"; exit 1; }
+          echo "$KEYSTORE_BASE64" | base64 -d > upload.jks
+          cat > keystore.properties <<EOF
+          storeFile=upload.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEYSTORE_ALIAS
+          keyPassword=$KEYSTORE_ALIAS_PASSWORD
+          EOF
+
+      - run: ./gradlew ${{ inputs.gradle-tasks }}
+
+      # Firmado con la clave de subida y no con la de debug. Comprobarlo es barato
+      # y el fallo que atrapa es de los que Play solo cuenta despues de subir.
+      - name: Verificar la firma
+        run: |
+          set -euo pipefail
+          # A fichero y no por tuberia a grep: grep -q sale pronto, jarsigner recibe
+          # SIGPIPE y pipefail convertiria una comprobacion correcta en un build roto.
+          # -verbose:summary y no -certs a secas: sin verbose, jarsigner imprime "jar
+          # verified" y ni una linea de certificado, asi que el grep no encuentra nada.
+          jarsigner -verify -verbose:summary -certs '${{ inputs.aab-path }}' > signature.txt
+          grep -q '${{ inputs.signer-cn }}' signature.txt \
+            || { echo "::error::bundle is not signed with the upload key"; exit 1; }
+
+      # Antes de la accion de terceros, no despues. Esa accion recibe el mismo
+      # directorio de trabajo y no tiene ninguna razon para encontrarse la clave.
+      - name: Borrar la clave
+        run: rm -f upload.jks keystore.properties
+
+      # ponytail: etiqueta movil en una accion de terceros. Fijar a un SHA si esto
+      # llega a correr donde la cuenta de servicio pueda hacer algo mas que publicar.
+      - uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ inputs.package-name }}
+          releaseFiles: ${{ inputs.aab-path }}
+          # tracks y no track: el singular esta deprecado en la accion y avisa en cada ejecucion.
+          tracks: ${{ inputs.track }}
+          status: completed
+          whatsNewDirectory: ${{ inputs.whatsnew-dir }}
+
+      - name: Asegurar que la clave no queda ni fallando
+        if: always()
+        run: rm -f upload.jks keystore.properties
