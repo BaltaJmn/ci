@@ -59,13 +59,10 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
-    # Las variables van a nivel de job porque Gradle las lee en tiempo de
-    # configuracion, no dentro de una tarea concreta.
-    env:
-      KEYSTORE_PATH: upload.jks
-      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      KEYSTORE_ALIAS: ${{ secrets.KEY_ALIAS }}
-      KEYSTORE_ALIAS_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    # Lo unico que el job necesita de GitHub es leer el codigo. Explicito para no depender de
+    # como este configurado el repositorio que llama.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -76,37 +73,20 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      # Generico a proposito: hay apps que generan configuracion en tiempo de build
-      # a partir del entorno y romperian aqui sin sus credenciales. El fichero
-      # compartido no tiene por que saber como se llaman.
-      # add-mask antes de escribir: lo que entra por GITHUB_ENV no lo enmascara
-      # GitHub solo, y estos logs son publicos.
-      - name: Variables de build de la app
-        env:
-          BUILD_ENV: ${{ secrets.BUILD_ENV }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # El contexto secrets no se puede usar en un `if:` de paso, asi que la
-          # comprobacion de "esta app no necesita nada" va aqui dentro.
-          [ -n "${BUILD_ENV:-}" ] || exit 0
-          while IFS= read -r line; do
-            case "$line" in ''|'#'*) continue;; esac
-            # Una variable declarada pero vacia no se enmascara ni se exporta: seria
-            # enmascarar la cadena vacia, que tapa el log entero.
-            [ -n "${line#*=}" ] || continue
-            echo "::add-mask::${line#*=}"
-            echo "$line" >> "$GITHUB_ENV"
-          done <<< "$BUILD_ENV"
-
       # Dos mecanismos de firma conviviendo a proposito: hay apps que leen
       # keystore.properties y otras que leen el entorno. Escribir las dos cosas
       # cuesta cuatro lineas y evita tocar el Gradle de cada app.
       # Si falta el secreto el build no rompe, firma con la clave de debug y sube
       # basura, asi que se falla aqui y en voz alta.
+      # Las contrasenas van en el env de este paso y del de construir, no del job:
+      # la accion de terceros que publica corre en el mismo job y no tiene por que
+      # verlas.
       - name: Restaurar la clave de subida
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_ALIAS_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           set -euo pipefail
           test -n "$KEYSTORE_BASE64" || { echo "::error::KEYSTORE_BASE64 is empty"; exit 1; }
@@ -122,10 +102,29 @@ jobs:
       # Este workflow es publico y lo puede llamar cualquiera: interpolar texto
       # ajeno en un `run:` seria inyeccion de shell, aunque solo se hiciera dano
       # a si mismo. Sin comillas a proposito, para que las tareas se separen.
+      # Las variables de la app (BUILD_ENV, una KEY=VALUE por linea) se exportan
+      # aqui dentro y no por GITHUB_ENV, por lo mismo que las contrasenas: solo
+      # Gradle las necesita. add-mask antes de exportar, porque estos logs son
+      # publicos; una declarada pero vacia se salta, enmascarar la cadena vacia
+      # taparia el log entero.
       - name: Construir
         env:
           GRADLE_TASKS: ${{ inputs.gradle-tasks }}
-        run: ./gradlew $GRADLE_TASKS
+          BUILD_ENV: ${{ secrets.BUILD_ENV }}
+          KEYSTORE_PATH: upload.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEYSTORE_ALIAS_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r line; do
+            case "$line" in ''|'#'*) continue;; esac
+            [ -n "${line#*=}" ] || continue
+            echo "::add-mask::${line#*=}"
+            export "$line"
+          done <<< "${BUILD_ENV:-}"
+          ./gradlew $GRADLE_TASKS
 
       # Firmado con la clave de subida y no con la de debug. Comprobarlo es barato
       # y el fallo que atrapa es de los que Play solo cuenta despues de subir.
@@ -148,9 +147,10 @@ jobs:
       - name: Borrar la clave
         run: rm -f upload.jks keystore.properties
 
-      # ponytail: etiqueta movil en una accion de terceros. Fijar a un SHA si esto
-      # llega a correr donde la cuenta de servicio pueda hacer algo mas que publicar.
-      - uses: r0adkll/upload-google-play@v1
+      # Fijada a un commit y no a la etiqueta movil v1: recibe la cuenta de servicio
+      # que publica, con permisos de cuenta sobre todas las apps. Para actualizar,
+      # el SHA de la version nueva y su etiqueta en el comentario.
+      - uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
         with:
           serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
           packageName: ${{ inputs.package-name }}
