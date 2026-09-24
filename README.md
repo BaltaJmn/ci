@@ -39,8 +39,16 @@ secreto y no como entrada porque las entradas aparecen en claro en el log, y el
 workflow las enmascara antes de exportarlas.
 
 Entradas: `package-name` (obligatoria), `signer-cn`, `java-version`,
-`gradle-tasks`, `aab-path`, `track`, `whatsnew-dir`. Los valores por defecto
-sirven para un proyecto con el modulo Android en `androidApp`.
+`gradle-tasks`, `aab-path`, `track`, `whatsnew-dir`, `status`. Los valores por
+defecto sirven para un proyecto con el modulo Android en `androidApp`.
+
+`signer-cn` por defecto es `CN=Baltasar`. Una app cuya clave de subida lleve otro
+CN tiene que pasarlo, o la comprobacion de firma falla aunque el paquete este bien
+firmado: se mira con `keytool -printcert -jarfile <aab>`, linea `Owner`.
+
+`status` es `completed` salvo en una app que todavia no tiene ninguna version
+publicada en ningun canal: ahi Play solo acepta `draft`, y la version se lanza
+despues desde la consola.
 
 Secretos que espera en el repositorio que llama: `KEYSTORE_BASE64`,
 `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` y `PLAY_SERVICE_ACCOUNT_JSON`.

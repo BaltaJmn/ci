@@ -33,6 +33,12 @@ on:
         description: Carpeta con un fichero whatsnew-<locale> por idioma. Vacio para no mandar notas.
         type: string
         default: ''
+      status:
+        description: |
+          Estado de la version en Play. draft mientras la app no tenga ninguna version publicada:
+          Play rechaza cualquier otro estado en una app en borrador.
+        type: string
+        default: completed
     secrets:
       KEYSTORE_BASE64:
         required: true
@@ -151,7 +157,7 @@ jobs:
           releaseFiles: ${{ inputs.aab-path }}
           # tracks y no track: el singular esta deprecado en la accion y avisa en cada ejecucion.
           tracks: ${{ inputs.track }}
-          status: completed
+          status: ${{ inputs.status }}
           whatsNewDirectory: ${{ inputs.whatsnew-dir }}
 
       - name: Asegurar que la clave no queda ni fallando
