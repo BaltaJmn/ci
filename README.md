@@ -60,9 +60,55 @@ raiz y ademas exporta `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEYSTORE_ALIAS` y
 `KEYSTORE_ALIAS_PASSWORD`, asi que el Gradle de la app puede leer cualquiera de
 las dos sin cambios.
 
+## `ios-testflight-release.yml`
+
+Archiva la app de iOS, la firma con los certificados propios del equipo y la sube
+a App Store Connect, que la pasa a TestFlight. La version y el build son el
+`versionName` y el `versionCode` de Android, asi que una etiqueta sube lo mismo a
+las dos tiendas.
+
+```yaml
+jobs:
+  testflight:
+    uses: BaltaJmn/ci/.github/workflows/ios-testflight-release.yml@main
+    secrets:
+      APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+      APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+      APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_DEVELOPMENT_P12: ${{ secrets.APPLE_DEVELOPMENT_P12 }}
+      APPLE_DEVELOPMENT_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_P12_PASSWORD }}
+      APPLE_DISTRIBUTION_P12: ${{ secrets.APPLE_DISTRIBUTION_P12 }}
+      APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+```
+
+Entradas: `project` (`iosApp/iosApp.xcodeproj`), `scheme` (`iosApp`),
+`version-file` (`androidApp/build.gradle.kts`; FlowTime pasa
+`build-logic/plugins/src/main/java/Config.kt`) y `java-version`.
+
+Los dos `.p12` son a proposito, y cada uno evita un fallo distinto:
+
+- **Desarrollo.** Con la clave de la API, `-allowProvisioningUpdates` crea
+  certificado y perfiles. En una maquina recien creada no hay identidad de
+  desarrollo, asi que crearia un certificado nuevo en cada ejecucion hasta topar
+  con el limite de Apple.
+- **Distribucion.** Sin certificado de distribucion en el llavero, Xcode firma en
+  la nube, y en este equipo eso no sube: le pasa a `codesign` el requisito
+  designado como argumento, con el nombre del certificado dentro, y la "e" con
+  tilde de "Jimenez" se descompone por el camino (NFD). La firma deja de cumplir
+  su propio requisito y App Store Connect la rechaza con ITMS-90035.
+
+Los perfiles si los sigue creando Xcode con la clave de la API: ningun
+`.mobileprovision` vive en un secreto. Los certificados, su contrasena y como se
+renuevan estan en `~/keys/LEEME.md`, y `~/keys/testflight.sh` hace lo mismo desde
+el Mac cuando Actions no puede (sin maquina macOS libre, o un repositorio privado
+con la facturacion parada).
+
 ## Lo que no esta aqui, y por que
 
-Los workflows de tests, el despliegue web y la subida a TestFlight se quedan en
-cada repositorio. Solo comparten tres lineas de preparacion (checkout, Java,
-Gradle) y difieren en version de Java, maquina y tareas: un workflow con seis
-entradas para ahorrar eso se lee peor que los dos ficheros que sustituye.
+Los workflows de tests y el despliegue web se quedan en cada repositorio. Solo
+comparten tres lineas de preparacion (checkout, Java, Gradle) y difieren en
+version de Java, maquina y tareas: un workflow con seis entradas para ahorrar eso
+se lee peor que los dos ficheros que sustituye. La subida a TestFlight si vino
+aqui: era el mismo fichero en las cuatro apps, y el arreglo de la firma hubo que
+hacerlo cuatro veces.
