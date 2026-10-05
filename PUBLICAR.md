@@ -68,7 +68,9 @@ una clave rotada a mano en un solo sitio rompe los demás en silencio.
 8. Build: la etiqueta, o `testflight.sh`. `ITSAppUsesNonExemptEncryption = NO` en el `Info.plist`
    evita la pregunta del cifrado. Grupo interno de TestFlight `Equipo` para instalarla en el iPhone.
 9. Envío, en la web: *Añadir a revisión* en la versión, después en la primera compra integrada, y
-   *Enviar a revisión* con los dos dentro. Publicación manual o automática al aprobarla.
+   *Enviar a revisión* con los dos dentro. Publicación manual o automática al aprobarla. Estos clics,
+   y *Cancelar envío*, los hace el titular: el control de permisos de Claude los bloquea aunque se le
+   dé permiso en el chat. Claude deja todo comprobado y el navegador en la página.
 
 `~/keys/appstore.py estado <bundle>` dice qué falta antes de enviar.
 
@@ -107,7 +109,8 @@ el de la versión, vacío, y un `POST` de ese idioma da 409: hay que leer y hace
 
 **La primera compra no consumible** solo entra en el mismo envío que una versión. La API no la añade
 (`FIRST_NON_CONSUMABLE_MUST_BE_SUBMITTED_ON_VERSION`), y si se envía la versión sola, lo normal es
-un rechazo por la 2.1 al no encontrar la compra. Así salió el primer envío de Chroma.
+un rechazo por la 2.1 al no encontrar la compra. Así salió el primer envío de Chroma: se canceló y
+se reenvió con las dos.
 
 **Acciones en Node 20.** `actions/checkout`, `setup-java` y `setup-gradle` v4 avisan de que GitHub
 las fuerza a Node 24: los workflows de aquí van en v5.
@@ -116,7 +119,7 @@ las fuerza a Node 24: los workflows de aquí van en v5.
 
 | App | Google Play | App Store |
 |---|---|---|
-| Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) en revisión |
+| Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro en revisión; publicación manual |
 | FlowTime | Producción, 2.2.2 (59); ficha en 6 de 14 idiomas | 2.2.2 en preparación, sin build |
 | Quilt | Producción, 1.8 (9) | 1.8 en preparación, sin build, sin capturas |
 | MoodTraker | Prueba cerrada, build 2; ficha en 5 de 13 idiomas | 1.0 en preparación, sin build, sin capturas |
