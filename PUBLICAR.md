@@ -76,7 +76,8 @@ una clave rotada a mano en un solo sitio rompe los demás en silencio.
    profile ... doesn't match the entitlements file's value for the
    com.apple.security.application-groups entitlement". Lo hace el titular: el control de permisos
    de Claude bloquea *Register*.
-9. Build: la etiqueta, o `testflight.sh`. `ITSAppUsesNonExemptEncryption = NO` en el `Info.plist`
+9. Build: la etiqueta, o `testflight.sh`. Cuando App Store Connect la procesa,
+   `appstore.py build <bundle> <número>` la pone en la versión. `ITSAppUsesNonExemptEncryption = NO` en el `Info.plist`
    evita la pregunta del cifrado. Grupo interno de TestFlight `Equipo` para instalarla en el iPhone.
 10. Envío, en la web: *Añadir a revisión* en la versión, después en la primera compra integrada, y
    *Enviar a revisión* con los dos dentro. Publicación manual o automática al aprobarla. Estos clics,
