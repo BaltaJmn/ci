@@ -58,16 +58,27 @@ una clave rotada a mano en un solo sitio rompe los demás en silencio.
 4. Ficha: categorías, edad (cuestionario), copyright, contacto y notas para la revisión, precio
    (gratis) y disponibilidad (todos los países menos China continental, que pide registro ICP).
 5. Textos en todos los idiomas desde `store/app-store/<idioma>/`: `~/keys/appstore.py ficha`.
-   Capturas de iPhone de 6,9" (1320 x 2868).
+   Capturas de iPhone de 6,9" (1320 x 2868) desde `store/screenshots/iphone/<idioma>/`:
+   `appstore.py capturas`, que solo rellena los idiomas sin capturas y quita el canal alfa que
+   traen las del simulador (Apple lo rechaza). Las carpetas pueden llevar región (`it-IT`): el
+   script la quita donde Apple no la usa. China fuera: `appstore.py sin-china`.
 6. Solo iPhone en la v1 (`TARGETED_DEVICE_FAMILY = 1`). Con iPad, Apple exige también capturas de
    iPad de 13".
 7. Compra integrada: el ID lleva el bundle delante, porque no se repite entre apps de la misma
    cuenta (`com.baltajmn.<app>.pro_lifetime`). Nombre y descripción en todos los idiomas, precio con
-   base en España, captura para la revisión. En RevenueCat, la app de App Store con su `appl_` en la
+   base en España, captura para la revisión (`appstore.py captura-compra`; sin ella la compra se
+   queda en `MISSING_METADATA`). En RevenueCat, la app de App Store con su `appl_` en la
    app, el producto en el derecho y en la oferta, y la clave de compras integradas.
-8. Build: la etiqueta, o `testflight.sh`. `ITSAppUsesNonExemptEncryption = NO` en el `Info.plist`
+8. App Group del widget, una vez por app y **en el portal** (developer.apple.com, *Identifiers >
+   App Groups*): crear `group.com.baltajmn.<app>` y marcarlo en la capacidad *App Groups* del App ID
+   de la app y del widget. La API registra App IDs y activa la capacidad, pero no crea grupos ni los
+   asigna, y Xcode con la clave de la API tampoco. Sin él, el archive falla con "Provisioning
+   profile ... doesn't match the entitlements file's value for the
+   com.apple.security.application-groups entitlement". Lo hace el titular: el control de permisos
+   de Claude bloquea *Register*.
+9. Build: la etiqueta, o `testflight.sh`. `ITSAppUsesNonExemptEncryption = NO` en el `Info.plist`
    evita la pregunta del cifrado. Grupo interno de TestFlight `Equipo` para instalarla en el iPhone.
-9. Envío, en la web: *Añadir a revisión* en la versión, después en la primera compra integrada, y
+10. Envío, en la web: *Añadir a revisión* en la versión, después en la primera compra integrada, y
    *Enviar a revisión* con los dos dentro. Publicación manual o automática al aprobarla. Estos clics,
    y *Cancelar envío*, los hace el titular: el control de permisos de Claude los bloquea aunque se le
    dé permiso en el chat. Claude deja todo comprobado y el navegador en la página.
@@ -91,13 +102,21 @@ Apple. Arreglo: certificado Apple Development propio, importado igual.
 GitHub dejó de arrancar todos los trabajos de los privados con "recent account payments have
 failed". Un trabajo que falla sin pasos ni registro es eso. Chroma pasó a público por esto; Quilt ya
 lo era.
-FlowTime y MoodTraker siguen privados: sus subidas van con `testflight.sh` y `play.sh` hasta que se
-arregle la facturación o pasen a públicos. Ojo: los workflows de fichas también se paran, y en
-silencio: en Play, FlowTime tiene 6 idiomas con 14 en el repositorio, y MoodTraker 5 con 13.
+FlowTime pasó a público el mismo día. MoodTraker sigue privado: su build va con `testflight.sh` y su
+ficha de Play con `tools/play-listing/subir.py --subir` en local, hasta que se arregle la facturación
+o pase a público. Ojo: los workflows de fichas también se paran, y en silencio: en Play, FlowTime se
+quedó en 6 idiomas de 14 y MoodTraker en 5 de 13 (subidas todas el 05-10-2026).
+
+**App Groups.** Solo existía el de Chroma, y FlowTime, Quilt y MoodTraker no firmaban para la App
+Store por eso. Es el paso 8 de la sección 4.
+
+**Una coma en el nombre de un test.** Kotlin/Native no acepta comas en los nombres entre comillas
+invertidas: en la JVM pasa y en iOS no compila (`compileTestKotlinIosSimulatorArm64`). Así estuvo
+MoodTraker en rojo sin que se notara en local.
 
 **Sin máquina macOS.** Con el repositorio ya público, el trabajo esperó 15 minutos y GitHub lo canceló
 con "The job was not acquired by Runner of type hosted even after multiple attempts". Se subió con
-`testflight.sh`.
+`testflight.sh`. Esa noche le pasó también a trabajos de Ubuntu: basta con relanzarlos.
 
 **La ficha de App Store Connect se desvía.** En Chroma el idioma principal era español, China estaba
 disponible, la versión en preparación era la anterior y la ficha y la compra solo tenían cinco de
@@ -120,6 +139,10 @@ las fuerza a Node 24: los workflows de aquí van en v5.
 | App | Google Play | App Store |
 |---|---|---|
 | Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro en revisión; publicación manual |
-| FlowTime | Producción, 2.2.2 (59); ficha en 6 de 14 idiomas | 2.2.2 en preparación, sin build |
-| Quilt | Producción, 1.8 (9) | 1.8 en preparación, sin build, sin capturas |
-| MoodTraker | Prueba cerrada, build 2; ficha en 5 de 13 idiomas | 1.0 en preparación, sin build, sin capturas |
+| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 lista salvo la build (2.2.2 (59), por CI): falta su App Group |
+| Quilt | Producción, 1.8 (9) | 1.8 lista salvo la build (1.8 (9), por CI): falta su App Group |
+| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 lista salvo la build (1.0 (2), con `testflight.sh`): falta su App Group |
+
+"Lista" quiere decir: textos en todos los idiomas, capturas de 6,9", compras en `READY_TO_SUBMIT`
+con su captura para la revisión, privacidad publicada, China fuera, idioma principal inglés y
+RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la oferta actual).
