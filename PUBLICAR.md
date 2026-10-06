@@ -132,6 +132,15 @@ el de la versión, vacío, y un `POST` de ese idioma da 409: hay que leer y hace
 un rechazo por la 2.1 al no encontrar la compra. Así salió el primer envío de Chroma: se canceló y
 se reenvió con las dos.
 
+**Cuenta nueva, 2.1 *Information Needed* (06-10-2026).** Al primer envío de Chroma, Apple contestó
+que la cuenta tiene poco historial y pidió un vídeo grabado en un iPhone de verdad, con la última
+versión de iOS, desde que se abre la app y pasando por la compra, y siete respuestas: propósito y
+público, cómo se usa, servicios externos, diferencias por región, sector regulado y qué se compra y
+dónde. Hay que contestar en el Centro de resoluciones y ponerlo también en las notas. Para no
+repetir la vuelta, cada app lleva desde el principio esas siete respuestas en las notas
+(`store/formularios.md`, plantilla en el de Chroma) y su vídeo como adjunto de la información para
+la revisión (`appstore.py adjunto <bundle> <vídeo>`).
+
 **Acciones en Node 20.** `actions/checkout`, `setup-java` y `setup-gradle` v4 avisan de que GitHub
 las fuerza a Node 24: los workflows de aquí van en v5.
 
@@ -139,7 +148,7 @@ las fuerza a Node 24: los workflows de aquí van en v5.
 
 | App | Google Play | App Store |
 |---|---|---|
-| Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro en revisión; publicación manual |
+| Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro: 2.1 *Information Needed*, a falta del vídeo y de la respuesta |
 | FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 lista salvo la build (2.2.2 (59), por CI): falta su App Group |
 | Quilt | Producción, 1.8 (9) | 1.8 lista salvo la build (1.8 (9), por CI): falta su App Group |
 | MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 lista salvo la build (1.0 (2), con `testflight.sh`): falta su App Group |
