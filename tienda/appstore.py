@@ -6,7 +6,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
     appstore.py estado  <bundle id>                    what is missing before sending to review
     appstore.py ficha   <bundle id> <repo> [--dry]     store/app-store/<locale>/*.txt to the version
     appstore.py capturas <bundle id> <repo> [--dry]    store/screenshots/iphone/<locale>/*.png, 6,9"
-    appstore.py captura-compra <bundle id> <product id> <png>   review screenshot of a purchase
+    appstore.py captura-compra <bundle id> <product id> <png> [--reemplazar]   review screenshot of a purchase
     appstore.py adjunto <bundle id> <file>             attachment for App Review (screen recording)
     appstore.py sin-china <bundle id>                  mainland China off (it asks for an ICP number)
     appstore.py version <bundle id> <x.y.z>            version string of the version in preparation
@@ -230,16 +230,17 @@ def capturas(bundle, repo, dry):
             upload("appScreenshots", {"appScreenshotSet": {"data": {"type": "appScreenshotSets", "id": s["id"]}}}, p)
 
 
-def captura_compra(bundle, product, png):
-    a = app_of(bundle)["id"]
-    p = next((x for x in get_all(f"/v1/apps/{a}/inAppPurchasesV2") if x["attributes"]["productId"] == product), None)
-    if not p:
-        sys.exit(f"{product}: no existe en {bundle}")
-    if api("GET", f"/v2/inAppPurchases/{p['id']}/appStoreReviewScreenshot")["data"]:
-        print(f"{product}: ya tiene captura para la revisión")
+def captura_compra(bundle, product, png, replace=False):
+    """`replace`: for a purchase not yet sent, whose screenshot is out of date (an old price)."""
+    p = purchase(bundle, product)
+    old = api("GET", f"/v2/inAppPurchases/{p}/appStoreReviewScreenshot")["data"]
+    if old and not replace:
+        print(f"{product}: ya tiene captura para la revisión (--reemplazar para cambiarla)")
         return
+    if old:
+        api("DELETE", f"/v1/inAppPurchaseAppStoreReviewScreenshots/{old['id']}")
     upload("inAppPurchaseAppStoreReviewScreenshots",
-           {"inAppPurchaseV2": {"data": {"type": "inAppPurchases", "id": p["id"]}}}, pathlib.Path(png))
+           {"inAppPurchaseV2": {"data": {"type": "inAppPurchases", "id": p}}}, pathlib.Path(png))
     print(f"{product}: captura para la revisión subida")
 
 
@@ -331,7 +332,7 @@ def set_price(purchase, point):
 
 
 if __name__ == "__main__":
-    args = [x for x in sys.argv[1:] if x != "--dry"]
+    args = [x for x in sys.argv[1:] if x not in ("--dry", "--reemplazar")]
     if len(args) >= 2 and args[0] == "estado":
         estado(args[1])
     elif len(args) >= 3 and args[0] == "ficha":
@@ -339,7 +340,7 @@ if __name__ == "__main__":
     elif len(args) >= 3 and args[0] == "capturas":
         capturas(args[1], args[2], "--dry" in sys.argv)
     elif len(args) >= 4 and args[0] == "captura-compra":
-        captura_compra(args[1], args[2], args[3])
+        captura_compra(args[1], args[2], args[3], "--reemplazar" in sys.argv)
     elif len(args) >= 3 and args[0] == "adjunto":
         adjunto(args[1], args[2])
     elif len(args) >= 2 and args[0] == "sin-china":

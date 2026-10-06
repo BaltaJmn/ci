@@ -164,12 +164,23 @@ informe de un fallo de TestFlight se lee por la API: `betaFeedbackCrashSubmissio
 pruebas, StoreKit da el precio de EE. UU. y la hoja de compra el de España (Quilt: $3.99 en el
 botón y 4,99 € en la hoja). La app no falla; si se ve en el vídeo, se explica en las notas.
 
+**Precio y notas con la app ya en revisión (06-10-2026).** Con la versión y la compra en *Waiting for
+Review*, Apple deja cambiar el precio de la compra (`compra.py`) y las notas para la revisión
+(`appStoreReviewDetail`, por la API). Al bajar Pro a 1,99, las notas de las tres en revisión dicen
+el precio nuevo y que el vídeo se grabó con el anterior.
+
+**La captura de la compra tiene que tener tamaño de iPhone.** Una de otra medida sube, pero se queda
+en `FAILED` con `IMAGE_INCORRECT_DIMENSIONS` y la compra vuelve a `MISSING_METADATA`: 1320 x 2868.
+Borrar esa captura fallida dio 500 la primera vez y funcionó al reintentar; sin borrarla, Apple no
+deja crear otra (409). `appstore.py captura-compra ... --reemplazar` cambia la de una compra que aún
+no se ha enviado.
+
 ## 6. Estado de cada app (06-10-2026)
 
 | App | Google Play | App Store |
 |---|---|---|
 | Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro reenviadas el 06-10 con vídeo y respuestas; publicación manual |
-| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 (60) por CI el 06-10, con Ajustes arreglado en iOS; falta su vídeo y enviarla |
+| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 con la build 60 (Ajustes arreglado en iOS), compras con captura a 1,99 y privacidad publicada; falta el vídeo y enviarla |
 | Quilt | Producción, 1.8 (9) | 1.8 (9) y Quilt Pro enviadas el 06-10 con vídeo y respuestas; publicación manual |
 | MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 (2) en la versión, vídeo adjunto y notas al día; falta enviarla |
 
