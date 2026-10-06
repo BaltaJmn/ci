@@ -1,7 +1,7 @@
 name: iOS TestFlight release
 
 # Archives the iOS app, signs it with the team's own certificates and uploads it to App Store
-# Connect, which hands it to TestFlight. Called from each app's release-ios.yml.
+# Connect, which hands it to TestFlight. Called from each app's release.yml.
 on:
   workflow_call:
     inputs:

@@ -1,0 +1,79 @@
+name: Store listings
+
+# Workflow reutilizable: lo llama el listings.yml de cada app. Comprueba que store/ cumple el
+# contrato de la familia (README) y, si se pide, sube la ficha a Play, a la App Store o a las dos.
+# Los scripts son los de tienda/ de este repositorio, los mismos que se usan desde el Mac.
+on:
+  workflow_call:
+    inputs:
+      package-name:
+        description: applicationId en Play, y bundle id en la App Store (el mismo en toda la familia)
+        type: string
+        required: true
+      website:
+        description: Web de contacto de la ficha de Play, la misma que el soporte de la App Store
+        type: string
+        required: true
+      target:
+        description: check solo comprueba; play, app-store o both escriben en la tienda
+        type: string
+        default: check
+    secrets:
+      PLAY_SERVICE_ACCOUNT_JSON:
+        required: false
+      APPSTORE_KEY_ID:
+        required: false
+      APPSTORE_ISSUER_ID:
+        required: false
+      APPSTORE_PRIVATE_KEY:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  listings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Los scripts viven aqui y no en cada app: una sola copia que arreglar.
+      - uses: actions/checkout@v5
+        with:
+          repository: BaltaJmn/ci
+          path: .ci
+
+      # Con su propio Python y no el del sistema: en ubuntu-24.04 pip no instala en el del sistema.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Las entradas van por el entorno y no interpoladas en el script, como en los otros
+      # workflows de este repositorio: es publico y lo puede llamar cualquiera.
+      - name: Comprobar store/
+        run: python3 .ci/tienda/comprobar.py .
+
+      # Escribir en una tienda es un cambio de cara al publico: solo si se elige a mano.
+      - name: Subir a Play
+        if: inputs.target == 'play' || inputs.target == 'both'
+        env:
+          PACKAGE: ${{ inputs.package-name }}
+          WEBSITE: ${{ inputs.website }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: python3 .ci/tienda/play.py ficha "$PACKAGE" . "$WEBSITE"
+
+      # La ficha de la App Store solo se puede tocar con una version en preparacion: si la que hay
+      # esta en revision, appstore.py falla diciendolo, sin cambiar nada. Pillow quita el canal
+      # alfa de las capturas del simulador, que Apple rechaza.
+      - name: Subir a la App Store
+        if: inputs.target == 'app-store' || inputs.target == 'both'
+        env:
+          PACKAGE: ${{ inputs.package-name }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          pip install --quiet pillow
+          python3 .ci/tienda/appstore.py ficha "$PACKAGE" .
+          python3 .ci/tienda/appstore.py capturas "$PACKAGE" .

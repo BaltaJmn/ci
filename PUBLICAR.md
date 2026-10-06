@@ -10,10 +10,15 @@ copian están en `~/keys/LEEME.md`, fuera de cualquier repositorio.
 - La versión es una sola: `versionName` y `versionCode` de Android son el `MARKETING_VERSION` y el
   `CURRENT_PROJECT_VERSION` de iOS. Los workflows los leen del fichero de Android (`version-file`),
   así que no se pueden separar.
-- `git tag vX.Y && git push origin vX.Y` lanza `release.yml` (Play, canal `alpha` por defecto) y
-  `release-ios.yml` (TestFlight). Los dos son llamadas a los workflows de este repositorio.
+- `git tag vX.Y && git push origin vX.Y` lanza `release.yml`, que sube a Play (canal `alpha`) y a
+  TestFlight con dos llamadas a los workflows de este repositorio. Las cuatro apps igual, también las
+  que ya están en producción: producción en Play y el envío a revisión de Apple se hacen a mano.
 - Un `versionCode` no se reutiliza nunca: Play y App Store Connect rechazan un build repetido.
-- Sin Actions, lo mismo desde el Mac: `~/keys/play.sh aab` y `~/keys/testflight.sh`.
+- Sin Actions, lo mismo desde el Mac: `~/keys/play.sh aab` y `~/keys/testflight.sh`, que son
+  `tienda/play.py` y `tienda/testflight.sh` de este repositorio.
+- La ficha va aparte, en `listings.yml`: cada push a `store/` la comprueba (`tienda/comprobar.py`), y a
+  mano (`gh workflow run listings.yml -f target=play|app-store|both`) la sube. Qué tiene que haber en
+  `store/`: README, *El contrato de cada app*.
 
 ## 2. Cuentas, credenciales y secretos
 
@@ -34,13 +39,14 @@ una clave rotada a mano en un solo sitio rompe los demás en silencio.
 ## 3. Google Play
 
 1. Clave de subida y `keystore.properties` (nunca en el repositorio).
-2. La app en Play Console, en el navegador: formularios de contenido, categoría, contacto, ficha y
-   capturas. Las fichas en todos los idiomas suben por la API (`play.sh ficha` o el workflow de
-   fichas de la app).
+2. La app en Play Console, en el navegador: formularios de contenido y categoría. Ficha, gráficos,
+   capturas y contacto en todos los idiomas suben por la API: `listings.yml -f target=play`, o
+   `~/keys/play.sh ficha <paquete> <repo> <web>` (con `--dry`, Play la valida y se descarta).
 3. Primera subida a prueba interna como borrador (`status: draft`), y ese borrador se publica una
    vez a mano desde la consola.
 4. El producto `pro_lifetime` en Play y, en RevenueCat, la app de Play con la cuenta de servicio de
-   **solo lectura** (nunca la que publica), el derecho `pro` y la oferta `default`.
+   **solo lectura** (nunca la que publica), el derecho `pro` y la oferta `default`. Precio y textos
+   de la compra, los de la App Store, con `tienda/compra.py` (sección 4, paso 7).
 5. Prueba cerrada: **12 testers con la prueba aceptada durante 14 días seguidos** (cuentas
    personales creadas después de noviembre de 2023). Después, *Solicitar acceso a producción*, que
    pregunta cómo se reclutó a los testers y qué cambió; Google tarda hasta 7 días.
@@ -57,17 +63,20 @@ una clave rotada a mano en un solo sitio rompe los demás en silencio.
    RevenueCat (historial de compras, no vinculado, sin rastreo).
 4. Ficha: categorías, edad (cuestionario), copyright, contacto y notas para la revisión, precio
    (gratis) y disponibilidad (todos los países menos China continental, que pide registro ICP).
-5. Textos en todos los idiomas desde `store/app-store/<idioma>/`: `~/keys/appstore.py ficha`.
-   Capturas de iPhone de 6,9" (1320 x 2868) desde `store/screenshots/iphone/<idioma>/`:
-   `appstore.py capturas`, que solo rellena los idiomas sin capturas y quita el canal alfa que
-   traen las del simulador (Apple lo rechaza). Las carpetas pueden llevar región (`it-IT`): el
-   script la quita donde Apple no la usa. China fuera: `appstore.py sin-china`.
+5. Textos en todos los idiomas desde `store/app-store/<idioma>/` y capturas de iPhone de 6,9"
+   (1320 x 2868) desde `store/screenshots/iphone/<idioma>/`: `listings.yml -f target=app-store`, o
+   `~/keys/appstore.py ficha` y `capturas`. Las capturas solo rellenan los idiomas que no tienen y
+   pierden el canal alfa que traen las del simulador (Apple lo rechaza). Las carpetas llevan región
+   (`it-IT`): el script la quita donde Apple no la usa. China fuera: `appstore.py sin-china`.
 6. Solo iPhone en la v1 (`TARGETED_DEVICE_FAMILY = 1`). Con iPad, Apple exige también capturas de
    iPad de 13".
 7. Compra integrada: el ID lleva el bundle delante, porque no se repite entre apps de la misma
-   cuenta (`com.baltajmn.<app>.pro_lifetime`). Nombre y descripción en todos los idiomas, precio con
-   base en España, captura para la revisión (`appstore.py captura-compra`; sin ella la compra se
-   queda en `MISSING_METADATA`). En RevenueCat, la app de App Store con su `appl_` en la
+   cuenta (`com.baltajmn.<app>.pro_lifetime`). Nombre y descripción en todos los idiomas, captura
+   para la revisión (`appstore.py captura-compra`; sin ella la compra se queda en
+   `MISSING_METADATA`). Precio, **1,99 EUR en todas** (neto ~1,40 tras IVA y el 15 %): `compra.py
+   <paquete> <producto Play> <producto Apple> 1.99` pone España de base en Apple, copia la igualación
+   de Apple a Play donde la moneda coincide (127 de 174 regiones) y los textos de la compra de Apple
+   a la de Play. En RevenueCat, la app de App Store con su `appl_` en la
    app, el producto en el derecho y en la oferta, y la clave de compras integradas.
 8. App Group del widget, una vez por app y **en el portal** (developer.apple.com, *Identifiers >
    App Groups*): crear `group.com.baltajmn.<app>` y marcarlo en la capacidad *App Groups* del App ID
@@ -104,7 +113,7 @@ GitHub dejó de arrancar todos los trabajos de los privados con "recent account 
 failed". Un trabajo que falla sin pasos ni registro es eso. Chroma pasó a público por esto; Quilt ya
 lo era.
 FlowTime pasó a público el mismo día. MoodTraker sigue privado: su build va con `testflight.sh` y su
-ficha de Play con `tools/play-listing/subir.py --subir` en local, hasta que se arregle la facturación
+ficha de Play con `~/keys/play.sh ficha` en local, hasta que se arregle la facturación
 o pase a público. Ojo: los workflows de fichas también se paran, y en silencio: en Play, FlowTime se
 quedó en 6 idiomas de 14 y MoodTraker en 5 de 13 (subidas todas el 05-10-2026).
 
@@ -145,14 +154,24 @@ apps* sigue desactivado hasta pulsar *Actualizar revisión* en la página de la 
 **Acciones en Node 20.** `actions/checkout`, `setup-java` y `setup-gradle` v4 avisan de que GitHub
 las fuerza a Node 24: los workflows de aquí van en v5.
 
-## 6. Estado de cada app (05-10-2026)
+**Una dependencia que solo existe en Android tumba la pantalla en iOS.** FlowTime 2.2.2 (59) se
+cerraba al abrir Ajustes en el iPhone: su ViewModel pedía `FocusMode`, declarado solo en el módulo
+de Koin de Android. Compila igual y revienta al abrir la pantalla (SIGABRT en
+`InstanceFactory.create`). Antes de subir a TestFlight, abrir cada pantalla en el simulador. El
+informe de un fallo de TestFlight se lee por la API: `betaFeedbackCrashSubmissions/{id}/crashLog`.
+
+**El precio en TestFlight sale de EE. UU.** Si el iPhone aún no ha iniciado sesión en la tienda de
+pruebas, StoreKit da el precio de EE. UU. y la hoja de compra el de España (Quilt: $3.99 en el
+botón y 4,99 € en la hoja). La app no falla; si se ve en el vídeo, se explica en las notas.
+
+## 6. Estado de cada app (06-10-2026)
 
 | App | Google Play | App Store |
 |---|---|---|
 | Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro reenviadas el 06-10 con vídeo y respuestas; publicación manual |
-| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 (59) subida por CI el 06-10; falta su vídeo y enviarla |
-| Quilt | Producción, 1.8 (9) | 1.8 (9) subida por CI el 06-10 y puesta en la versión; falta su vídeo y enviarla |
-| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 (2) subida con `testflight.sh` y puesta en la versión; falta su vídeo y enviarla |
+| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 (60) por CI el 06-10, con Ajustes arreglado en iOS; falta su vídeo y enviarla |
+| Quilt | Producción, 1.8 (9) | 1.8 (9) y Quilt Pro enviadas el 06-10 con vídeo y respuestas; publicación manual |
+| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 (2) en la versión, vídeo adjunto y notas al día; falta enviarla |
 
 La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 con Quilt y FlowTime
 (firma con los dos `.p12`, archive, export y subida).
