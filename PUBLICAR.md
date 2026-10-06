@@ -139,7 +139,8 @@ público, cómo se usa, servicios externos, diferencias por región, sector regu
 dónde. Hay que contestar en el Centro de resoluciones y ponerlo también en las notas. Para no
 repetir la vuelta, cada app lleva desde el principio esas siete respuestas en las notas
 (`store/formularios.md`, plantilla en el de Chroma) y su vídeo como adjunto de la información para
-la revisión (`appstore.py adjunto <bundle> <vídeo>`).
+la revisión (`appstore.py adjunto <bundle> <vídeo>`). Tras contestar, *Volver a enviar a revisión de
+apps* sigue desactivado hasta pulsar *Actualizar revisión* en la página de la versión rechazada.
 
 **Acciones en Node 20.** `actions/checkout`, `setup-java` y `setup-gradle` v4 avisan de que GitHub
 las fuerza a Node 24: los workflows de aquí van en v5.
@@ -148,10 +149,13 @@ las fuerza a Node 24: los workflows de aquí van en v5.
 
 | App | Google Play | App Store |
 |---|---|---|
-| Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro: 2.1 *Information Needed*, a falta del vídeo y de la respuesta |
-| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 lista salvo la build (2.2.2 (59), por CI): falta su App Group |
-| Quilt | Producción, 1.8 (9) | 1.8 lista salvo la build (1.8 (9), por CI): falta su App Group |
-| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 lista salvo la build (1.0 (2), con `testflight.sh`): falta su App Group |
+| Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro reenviadas el 06-10 con vídeo y respuestas; publicación manual |
+| FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 (59) subida por CI el 06-10; falta su vídeo y enviarla |
+| Quilt | Producción, 1.8 (9) | 1.8 (9) subida por CI el 06-10 y puesta en la versión; falta su vídeo y enviarla |
+| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 (2) subida con `testflight.sh` y puesta en la versión; falta su vídeo y enviarla |
+
+La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 con Quilt y FlowTime
+(firma con los dos `.p12`, archive, export y subida).
 
 "Lista" quiere decir: textos en todos los idiomas, capturas de 6,9", compras en `READY_TO_SUBMIT`
 con su captura para la revisión, privacidad publicada, China fuera, idioma principal inglés y
