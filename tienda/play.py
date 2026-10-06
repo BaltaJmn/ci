@@ -192,7 +192,8 @@ def compra(package, product, prices, listings, dry):
     if dry or not mask:
         print("  --dry: no se cambia nada" if dry else "  nada que cambiar")
         return
-    call("PATCH", f"{API}{package}/oneTimeProducts/{product}?updateMask={','.join(mask)}"
+    # Lowercase on purpose: the PATCH answers 404 to oneTimeProducts, which GET accepts.
+    call("PATCH", f"{API}{package}/onetimeproducts/{product}?updateMask={','.join(mask)}"
                   f"&regionsVersion.version={p['regionsVersion']['version']}", p)
     print(f"  {product}: guardado en Play")
 
