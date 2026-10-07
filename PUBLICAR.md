@@ -182,7 +182,7 @@ no se ha enviado.
 | Chroma | Prueba cerrada, build 15; producción como pronto el 13-10 | 1.0.12 (15) y Chroma Pro reenviadas el 06-10 con vídeo y respuestas; publicación manual |
 | FlowTime | Producción, 2.2.2 (59); ficha en los 14 idiomas | 2.2.2 con la build 60 (Ajustes arreglado en iOS), compras con captura a 1,99 y privacidad publicada; falta el vídeo y enviarla |
 | Quilt | Producción, 1.8 (9) | 1.8 (9) y Quilt Pro enviadas el 06-10 con vídeo y respuestas; publicación manual |
-| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 (2) en la versión, vídeo adjunto y notas al día; falta enviarla |
+| MoodTraker | Prueba cerrada, build 2; ficha en los 13 idiomas | 1.0 (2) y MoodTraker Pro en *Waiting for Review* desde el 07-10; capturas y textos nuevos esperan a la versión siguiente |
 
 La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 con Quilt y FlowTime
 (firma con los dos `.p12`, archive, export y subida).

@@ -5,7 +5,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
 
     appstore.py estado  <bundle id>                    what is missing before sending to review
     appstore.py ficha   <bundle id> <repo> [--dry]     store/app-store/<locale>/*.txt to the version
-    appstore.py capturas <bundle id> <repo> [--dry]    store/screenshots/iphone/<locale>/*.png, 6,9"
+    appstore.py capturas <bundle id> <repo> [--dry] [--reemplazar]   store/screenshots/iphone/<locale>/*.png, 6,9"
     appstore.py captura-compra <bundle id> <product id> <png> [--reemplazar]   review screenshot of a purchase
     appstore.py adjunto <bundle id> <file>             attachment for App Review (screen recording)
     appstore.py sin-china <bundle id>                  mainland China off (it asks for an ICP number)
@@ -15,7 +15,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
 
 `ficha` creates the missing locales and patches the ones that differ; support and privacy URLs are
 the ones the en-US locale already has. `capturas` only fills locales that have no 6,9" screenshots,
-it never deletes. Folder names may carry a region Apple does not use (it-IT is `it`). Sending to
+and deletes nothing unless `--reemplazar`, which swaps the ones of every locale that has a folder. Folder names may carry a region Apple does not use (it-IT is `it`). Sending to
 review stays in the web: the first non-consumable purchase of an app can only go in the same
 submission as a version, and the API does not add it.
 """
@@ -205,7 +205,7 @@ def upload(kind, relationships, path):
         "uploaded": True, "sourceFileChecksum": hashlib.md5(data).hexdigest()}}})
 
 
-def capturas(bundle, repo, dry):
+def capturas(bundle, repo, dry, replace=False):
     v, _ = editable(app_of(bundle)["id"])
     locs = {l["attributes"]["locale"]: l for l in get_all(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")}
     for d in sorted(p for p in (pathlib.Path(repo) / "store/screenshots/iphone").iterdir() if p.is_dir()):
@@ -216,12 +216,15 @@ def capturas(bundle, repo, dry):
         sets = {s["attributes"]["screenshotDisplayType"]: s
                 for s in get_all(f"/v1/appStoreVersionLocalizations/{loc['id']}/appScreenshotSets")}
         s = sets.get("APP_IPHONE_67")
-        if s and get_all(f"/v1/appScreenshotSets/{s['id']}/appScreenshots"):
-            print(f"  {d.name}: ya tiene capturas de 6,9\", no se tocan")
+        old = get_all(f"/v1/appScreenshotSets/{s['id']}/appScreenshots") if s else []
+        if old and not replace:
+            print(f"  {d.name}: ya tiene capturas de 6,9\", no se tocan (--reemplazar para cambiarlas)")
             continue
-        print(f"  {d.name}: sube {len(pngs)}")
+        print(f"  {d.name}: {f'cambia {len(old)} por' if old else 'sube'} {len(pngs)}")
         if dry:
             continue
+        for o in old:
+            api("DELETE", f"/v1/appScreenshots/{o['id']}")
         if not s:
             s = api("POST", "/v1/appScreenshotSets", {"data": {
                 "type": "appScreenshotSets", "attributes": {"screenshotDisplayType": "APP_IPHONE_67"},
@@ -338,7 +341,7 @@ if __name__ == "__main__":
     elif len(args) >= 3 and args[0] == "ficha":
         ficha(args[1], args[2], "--dry" in sys.argv)
     elif len(args) >= 3 and args[0] == "capturas":
-        capturas(args[1], args[2], "--dry" in sys.argv)
+        capturas(args[1], args[2], "--dry" in sys.argv, "--reemplazar" in sys.argv)
     elif len(args) >= 4 and args[0] == "captura-compra":
         captura_compra(args[1], args[2], args[3], "--reemplazar" in sys.argv)
     elif len(args) >= 3 and args[0] == "adjunto":
