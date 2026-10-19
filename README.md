@@ -45,6 +45,7 @@ store/screenshots/iphone/<idioma>/*.png                                1320 x 28
 - **Título**: `Nombre: palabra que se busca`, elegido por tienda según su ASO (`store/aso.md` de cada
   app). El resto de la ficha dice lo mismo en las dos, salvo lo que solo existe en una plataforma.
 - **Pro, compra única de 1,99 EUR** en las cuatro, igual en las dos tiendas (`compra.py`).
+- **Suscripción mensual `pro_monthly` de 0,99 EUR** en las cuatro (desde 19-10-2026), mismo derecho `pro`: `compra.py --suscripcion` en las tiendas y `revenuecat.py suscripcion` en RevenueCat.
 
 ## Workflows
 
@@ -117,6 +118,8 @@ Actions. Leen las credenciales del entorno en CI y del Llavero y `~/keys` en el 
 | `play.py estado\|ficha\|aab` | Play: canales y fichas; la ficha entera en una edición (`--dry` la valida y la tira); un AAB a un canal de prueba |
 | `appstore.py estado\|ficha\|capturas\|...` | App Store Connect: qué falta antes de enviar, ficha, capturas, compras, adjuntos, versión y build |
 | `compra.py <paquete> <producto Play> <producto Apple> [precio]` | La compra igual en las dos tiendas: textos de Apple copiados a Play y, con precio, base en España e igualación de Apple aplicada a Play donde la moneda coincide |
+| `compra.py --suscripcion <paquete> <suscripción Play> <producto Apple> <precio> <compra vitalicia> <traducciones.json> [--dry]` | La suscripción mensual en las dos tiendas: grupo Pro y precios por territorio en Apple, plan base `monthly` en Play, textos en todos los idiomas. Se puede repetir: completa lo que falte |
+| `revenuecat.py suscripcion <app> <paquete> <producto Play> <plan base>` | Productos en las dos apps de RevenueCat, unidos a `pro` y al paquete `$rc_monthly` de `default` |
 | `testflight.sh <repo> [fichero de versión]` | Lo mismo que `ios-testflight-release.yml`, desde el Mac, cuando Actions no puede |
 
 ## Lo que no está aquí, y por qué

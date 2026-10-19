@@ -13,10 +13,16 @@ gets Apple's price; the rest (Play charges local currency where Apple charges do
 conversion of the same price before tax. A buyer sees the same number in both stores wherever that
 can be.
 
+Subscription: `compra.py --suscripcion <package> <Play subscription> <App Store product> <price> <purchase product>
+<traducciones.json> [--dry]` creates the monthly subscription (Play base plan `monthly`, App Store group
+Pro, one month) at that price in both stores, with the same texts. The name and a suffix come from
+the lifetime purchase's texts plus `traducciones.json` ({locale: {"suffix", "desc"}}). Existing products
+are not touched.
+
 The bundle id is the package name, as in the whole family. `--dry` prints and changes nothing;
 `--solo-play` leaves the App Store as it is (a purchase in review, whose notes quote its price).
 """
-import pathlib, sys
+import json, pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import appstore, play  # noqa: E402
@@ -71,7 +77,31 @@ def main(package, play_product, asc_product, price, dry, only_play):
         print(f"  {asc_product}: precio guardado en App Store")
 
 
+def suscripcion(package, play_product, asc_product, price, lifetime, translations, dry):
+    base = appstore.purchase_texts(appstore.purchase(package, lifetime))
+    texts = {}
+    for loc, t in json.load(open(translations)).items():
+        if loc in base:
+            n = f"{base[loc][0]} {t['suffix']}"
+            assert len(n) <= 30 and len(t["desc"]) <= 45, (loc, n, t["desc"])
+            texts[loc] = (n, t["desc"])
+    appstore.subscription(package, asc_product, f"{base['en-US'][0]} monthly", base["en-US"][0], texts, price, dry)
+    prices = play.convert(package, play.money(float(price) / 1.21, "EUR"))
+    if not dry:
+        for t, (amount, currency) in appstore.subscription_prices(package, asc_product, price).items():
+            r = A2.get(t)
+            if r in prices and prices[r]["currencyCode"] == currency:
+                prices[r] = play.money(amount, currency)
+    prices["ES"] = play.money(price, "EUR")
+    ptexts = {PLAY_LOCALE.get(l, l): t for l, t in texts.items()}
+    play.suscripcion(package, play_product, "monthly", prices, ptexts, dry)
+
+
 if __name__ == "__main__":
+    if "--suscripcion" in sys.argv:
+        a = [x for x in sys.argv[1:] if not x.startswith("--")]
+        suscripcion(a[0], a[1], a[2], a[3], a[4], a[5], "--dry" in sys.argv)
+        sys.exit()
     a = [x for x in sys.argv[1:] if not x.startswith("--")]
     if len(a) not in (3, 4):
         sys.exit(__doc__)

@@ -334,6 +334,96 @@ def set_price(purchase, point):
                           "inAppPurchasePricePoint": {"data": {"type": "inAppPurchasePricePoints", "id": point}}}}]})
 
 
+def subscription(bundle, product, name, group_name, texts, spain_price, dry):
+    """A monthly subscription in its own group, with texts in every locale of `texts`
+    ({locale: (name, description)}), Spain at `spain_price` and the equalized price in every other
+    territory except China. Every step is skipped if done, so a failed run is resumed by running it
+    again. Its review screenshot is not here: it needs the paywall showing the price."""
+    app = app_of(bundle)["id"]
+    groups = get_all(f"/v1/apps/{app}/subscriptionGroups")
+    gid = groups[0]["id"] if groups else None
+    sub = next((s for g in groups for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
+                if s["attributes"]["productId"] == product), None)
+    print(f"  {product}: grupo {group_name}, 1 mes, {spain_price} EUR en ESP, textos en {len(texts)} idiomas"
+          f"{' (ya existe, se completa lo que falte)' if sub else ''}")
+    if dry:
+        return
+    if not gid:
+        gid = api("POST", "/v1/subscriptionGroups", {"data": {"type": "subscriptionGroups", "attributes": {
+            "referenceName": "Pro"}, "relationships": {"app": {"data": {"type": "apps", "id": app}}}}})["data"]["id"]
+    have = {l["attributes"]["locale"] for l in get_all(f"/v1/subscriptionGroups/{gid}/subscriptionGroupLocalizations")}
+    for loc in texts:
+        if loc not in have:
+            api("POST", "/v1/subscriptionGroupLocalizations", {"data": {"type": "subscriptionGroupLocalizations",
+                "attributes": {"name": group_name, "locale": loc},
+                "relationships": {"subscriptionGroup": {"data": {"type": "subscriptionGroups", "id": gid}}}}})
+    if not sub:
+        sub = api("POST", "/v1/subscriptions", {"data": {"type": "subscriptions", "attributes": {
+            "name": name, "productId": product, "familySharable": False, "subscriptionPeriod": "ONE_MONTH",
+            "groupLevel": 1}, "relationships": {"group": {"data": {"type": "subscriptionGroups", "id": gid}}}}})["data"]
+    sid = sub["id"]
+    have = {l["attributes"]["locale"] for l in get_all(f"/v1/subscriptions/{sid}/subscriptionLocalizations")}
+    for loc, (n, d) in texts.items():
+        if loc not in have:
+            api("POST", "/v1/subscriptionLocalizations", {"data": {"type": "subscriptionLocalizations",
+                "attributes": {"name": n, "description": d, "locale": loc},
+                "relationships": {"subscription": {"data": {"type": "subscriptions", "id": sid}}}}})
+    point = _spain_point(sid, spain_price)
+    prices = {"ESP": point}
+    prices.update({t: pp for t, (pp, _) in _equalized(point).items()})
+    prices.pop("CHN", None)
+    terr = [{"type": "territories", "id": t} for t in prices]
+    if api("GET", f"/v1/subscriptions/{sid}/prices?limit=1")["data"] == []:
+        # Availability first: a price in a territory the subscription is not sold in is refused.
+        try:
+            api("POST", "/v1/subscriptionAvailabilities", {"data": {"type": "subscriptionAvailabilities",
+                "attributes": {"availableInNewTerritories": True}, "relationships": {
+                    "subscription": {"data": {"type": "subscriptions", "id": sid}},
+                    "availableTerritories": {"data": terr}}}})
+        except SystemExit as e:
+            if "already" not in str(e).lower():
+                raise
+        for t, pp in prices.items():
+            api("POST", "/v1/subscriptionPrices", {"data": {"type": "subscriptionPrices", "attributes": {
+                "startDate": None, "preserveCurrentPrice": False}, "relationships": {
+                "subscription": {"data": {"type": "subscriptions", "id": sid}},
+                "subscriptionPricePoint": {"data": {"type": "subscriptionPricePoints", "id": pp}},
+                "territory": {"data": {"type": "territories", "id": t}}}}})
+    print(f"  {product}: lista, {len(prices)} territorios con precio")
+
+
+def _spain_point(sid, spain_price):
+    pts = get_all(f"/v1/subscriptions/{sid}/pricePoints?filter[territory]=ESP&limit=200")
+    p = next((x for x in pts if float(x["attributes"]["customerPrice"]) == float(spain_price)), None)
+    if not p:
+        sys.exit(f"Apple no tiene un precio de {spain_price} EUR en España para suscripciones")
+    return p["id"]
+
+
+def _equalized(point):
+    """{territory: (price point id, (price, currency))} of a subscription price point."""
+    out, path = {}, f"/v1/subscriptionPricePoints/{point}/equalizations?include=territory&limit=200"
+    while path:
+        d = api("GET", path)
+        cur = {t["id"]: t["attributes"]["currency"] for t in d.get("included", []) if t["type"] == "territories"}
+        for x in d["data"]:
+            t = x["relationships"]["territory"]["data"]["id"]
+            out[t] = (x["id"], (x["attributes"]["customerPrice"], cur[t]))
+        path = d.get("links", {}).get("next")
+    return out
+
+
+def subscription_prices(bundle, product, spain_price):
+    """What Apple charges per territory for that subscription, to copy it to Play: {ESP: ('0.99', 'EUR'), ...}."""
+    app = app_of(bundle)["id"]
+    sid = next(s["id"] for g in get_all(f"/v1/apps/{app}/subscriptionGroups")
+               for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
+               if s["attributes"]["productId"] == product)
+    out = {t: v for t, (_, v) in _equalized(_spain_point(sid, spain_price)).items()}
+    out["ESP"] = (spain_price, "EUR")
+    return out
+
+
 if __name__ == "__main__":
     args = [x for x in sys.argv[1:] if x not in ("--dry", "--reemplazar")]
     if len(args) >= 2 and args[0] == "estado":

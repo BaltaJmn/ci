@@ -198,6 +198,43 @@ def compra(package, product, prices, listings, dry):
     print(f"  {product}: guardado en Play")
 
 
+def suscripcion(package, product, base_plan, prices, listings, dry):
+    """A monthly auto-renewing subscription with one base plan. `prices` and `listings` as in compra().
+    Created and its base plan activated if the product does not exist; an existing one is left alone."""
+    ref = call("GET", f"{API}{package}/oneTimeProducts")["oneTimeProducts"][0]
+    regions = [r["regionCode"] for r in ref["purchaseOptions"][0]["regionalPricingAndAvailabilityConfigs"]]
+    version = ref["regionsVersion"]["version"]
+    missing = [r for r in regions if r not in prices]
+    if missing:
+        sys.exit(f"Play no tiene precio convertido para {missing}")
+    es = float(prices["ES"]["units"]) + prices["ES"]["nanos"] / 1e9
+    body = {"packageName": package, "productId": product,
+            "listings": [{"languageCode": l, "title": t, "description": d, "benefits": []}
+                         for l, (t, d) in sorted(listings.items())],
+            "basePlans": [{"basePlanId": base_plan,
+                           "autoRenewingBasePlanType": {
+                               "billingPeriodDuration": "P1M", "gracePeriodDuration": "P7D",
+                               "accountHoldDuration": "P30D", "resubscribeState": "RESUBSCRIBE_STATE_ACTIVE",
+                               "prorationMode": "SUBSCRIPTION_PRORATION_MODE_CHARGE_ON_NEXT_BILLING_DATE",
+                               "legacyCompatible": False},
+                           "regionalConfigs": [{"regionCode": r, "price": prices[r], "newSubscriberAvailability": True}
+                                               for r in regions],
+                           "otherRegionsConfig": {"usdPrice": prices["US"], "eurPrice": money(es / 1.21, "EUR"),
+                                                  "newSubscriberAvailability": True}}]}
+    print(f"  {product}/{base_plan}: ES {prices['ES']['units']}.{prices['ES']['nanos'] // 10**7:02d} EUR, "
+          f"{len(regions)} regiones, {len(listings)} idiomas")
+    if dry:
+        print("  --dry: no se crea nada")
+        return
+    existing = call("GET", f"{API}{package}/subscriptions").get("subscriptions", [])
+    if any(x["productId"] == product for x in existing):
+        print(f"  {product}: ya existe en Play, no se toca")
+        return
+    call("POST", f"{API}{package}/subscriptions?productId={product}&regionsVersion.version={version}", body)
+    call("POST", f"{API}{package}/subscriptions/{product}/basePlans/{base_plan}:activate", {})
+    print(f"  {product}: creada y activa en Play")
+
+
 if __name__ == "__main__":
     dry = "--dry" in sys.argv
     a = [x for x in sys.argv[1:] if x != "--dry"]
