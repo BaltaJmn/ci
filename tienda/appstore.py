@@ -7,6 +7,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
     appstore.py ficha   <bundle id> <repo> [--dry]     store/app-store/<locale>/*.txt to the version
     appstore.py capturas <bundle id> <repo> [--dry] [--reemplazar]   store/screenshots/iphone/<locale>/*.png, 6,9"
     appstore.py captura-compra <bundle id> <product id> <png> [--reemplazar]   review screenshot of a purchase
+    appstore.py captura-suscripcion <bundle id> <product id> <png> [--reemplazar]   review screenshot of a subscription
     appstore.py adjunto <bundle id> <file>             attachment for App Review (screen recording)
     appstore.py sin-china <bundle id>                  mainland China off (it asks for an ICP number)
     appstore.py version <bundle id> <x.y.z>            version string of the version in preparation
@@ -247,6 +248,22 @@ def captura_compra(bundle, product, png, replace=False):
     print(f"{product}: captura para la revisión subida")
 
 
+def captura_suscripcion(bundle, product, png, replace=False):
+    app = app_of(bundle)["id"]
+    sid = next(s["id"] for g in get_all(f"/v1/apps/{app}/subscriptionGroups")
+               for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
+               if s["attributes"]["productId"] == product)
+    old = api("GET", f"/v1/subscriptions/{sid}/appStoreReviewScreenshot")["data"]
+    if old and not replace:
+        print(f"{product}: ya tiene captura para la revisión (--reemplazar para cambiarla)")
+        return
+    if old:
+        api("DELETE", f"/v1/subscriptionAppStoreReviewScreenshots/{old['id']}")
+    upload("subscriptionAppStoreReviewScreenshots",
+           {"subscription": {"data": {"type": "subscriptions", "id": sid}}}, pathlib.Path(png))
+    print(f"{product}: captura para la revisión subida")
+
+
 def adjunto(bundle, path):
     """A file for App Review, such as the screen recording a new account is asked for (2.1)."""
     v, _ = editable(app_of(bundle)["id"])
@@ -434,6 +451,8 @@ if __name__ == "__main__":
         capturas(args[1], args[2], "--dry" in sys.argv, "--reemplazar" in sys.argv)
     elif len(args) >= 4 and args[0] == "captura-compra":
         captura_compra(args[1], args[2], args[3], "--reemplazar" in sys.argv)
+    elif len(args) >= 4 and args[0] == "captura-suscripcion":
+        captura_suscripcion(args[1], args[2], args[3], "--reemplazar" in sys.argv)
     elif len(args) >= 3 and args[0] == "adjunto":
         adjunto(args[1], args[2])
     elif len(args) >= 2 and args[0] == "sin-china":
