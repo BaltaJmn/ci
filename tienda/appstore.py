@@ -10,6 +10,9 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
     appstore.py captura-suscripcion <bundle id> <product id> <png> [--reemplazar]   review screenshot of a subscription
     appstore.py adjunto <bundle id> <file>             attachment for App Review (screen recording)
     appstore.py sin-china <bundle id>                  mainland China off (it asks for an ICP number)
+    appstore.py nueva   <bundle id> <x.y.z>            create the next version (manual release)
+    appstore.py novedades <bundle id> <repo> [--dry]   store/whatsnew/whatsnew-<locale> to What's New
+    appstore.py notas   <bundle id> <repo> [--dry]     "Notas para el revisor" of store/formularios.md to App Review notes
     appstore.py version <bundle id> <x.y.z>            version string of the version in preparation
     appstore.py build <bundle id> <build number>       attach a processed build to that version
     Purchases: compra.py, which sets the same price and texts in both stores.
@@ -104,7 +107,7 @@ def editable(app_id):
     vs = get_all(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&filter[appStoreState]="
                  "PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED")
     infos = [i for i in get_all(f"/v1/apps/{app_id}/appInfos")
-             if i["attributes"].get("appStoreState") != "READY_FOR_DISTRIBUTION"]
+             if i["attributes"].get("appStoreState") not in ("READY_FOR_SALE", "READY_FOR_DISTRIBUTION")]
     if not vs:
         sys.exit("No hay versión en preparación: créala en App Store Connect o con la API")
     return vs[0], infos[0]
@@ -302,6 +305,56 @@ def version(bundle, number):
     print(f"versión en preparación: {v['attributes']['versionString']} pasa a {number}")
 
 
+def nueva(bundle, number):
+    """Creates the version after the one on sale (manual release, same copyright) unless one is
+    already in preparation."""
+    a = app_of(bundle)["id"]
+    vs = get_all(f"/v1/apps/{a}/appStoreVersions?filter[platform]=IOS")
+    pending = [v for v in vs if v["attributes"]["appStoreState"] in
+               ("PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED", "REJECTED", "METADATA_REJECTED")]
+    if pending:
+        print(f"{bundle}: ya hay una versión en preparación, {pending[0]['attributes']['versionString']}")
+        return
+    last = vs[0]["attributes"]
+    api("POST", "/v1/appStoreVersions", {"data": {"type": "appStoreVersions", "attributes": {
+        "platform": "IOS", "versionString": number, "releaseType": "MANUAL",
+        "copyright": last.get("copyright")}, "relationships": {"app": {"data": {"type": "apps", "id": a}}}}})
+    print(f"{bundle}: versión {number} creada")
+
+
+def novedades(bundle, repo, dry):
+    """store/whatsnew/whatsnew-<locale> (the files Play reads) to the What's New of the version."""
+    v, _ = editable(app_of(bundle)["id"])
+    vlocs = {l["attributes"]["locale"]: l for l in get_all(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")}
+    for f in sorted((pathlib.Path(repo) / "store/whatsnew").glob("whatsnew-*")):
+        _upsert("appStoreVersionLocalizations", "appStoreVersion", v["id"], vlocs,
+                asc_locale(f.name.removeprefix("whatsnew-")), {"whatsNew": _read(f)}, dry)
+
+
+def notas(bundle, repo, dry):
+    """The first code block after "Notas para el revisor" in store/formularios.md to the App Review
+    notes of the version. Contact and sign-in data are not touched."""
+    v, _ = editable(app_of(bundle)["id"])
+    text = (pathlib.Path(repo) / "store/formularios.md").read_text(encoding="utf-8")
+    block = text[text.index("Notas para el revisor"):].split("```")[1].strip()
+    if len(block) > 4000:
+        sys.exit(f"Las notas miden {len(block)} caracteres y Apple admite 4000")
+    rd = api("GET", f"/v1/appStoreVersions/{v['id']}/appStoreReviewDetail")["data"]
+    if rd and (rd["attributes"].get("notes") or "").strip() == block:
+        print("  notas: iguales")
+    elif not dry:
+        if rd:
+            api("PATCH", f"/v1/appStoreReviewDetails/{rd['id']}", {"data": {
+                "type": "appStoreReviewDetails", "id": rd["id"], "attributes": {"notes": block}}})
+        else:
+            api("POST", "/v1/appStoreReviewDetails", {"data": {"type": "appStoreReviewDetails",
+                "attributes": {"notes": block}, "relationships": {"appStoreVersion": {
+                    "data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+        print(f"  notas: {len(block)} caracteres")
+    else:
+        print(f"  notas: cambian ({len(block)} caracteres)")
+
+
 def purchase(bundle, product):
     a = app_of(bundle)["id"]
     p = next((x for x in get_all(f"/v1/apps/{a}/inAppPurchasesV2") if x["attributes"]["productId"] == product), None)
@@ -457,6 +510,12 @@ if __name__ == "__main__":
         adjunto(args[1], args[2])
     elif len(args) >= 2 and args[0] == "sin-china":
         sin_china(args[1])
+    elif len(args) >= 3 and args[0] == "nueva":
+        nueva(args[1], args[2])
+    elif len(args) >= 3 and args[0] == "novedades":
+        novedades(args[1], args[2], "--dry" in sys.argv)
+    elif len(args) >= 3 and args[0] == "notas":
+        notas(args[1], args[2], "--dry" in sys.argv)
     elif len(args) >= 3 and args[0] == "version":
         version(args[1], args[2])
     elif len(args) >= 3 and args[0] == "build":
