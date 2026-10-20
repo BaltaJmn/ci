@@ -441,10 +441,10 @@ def subscription(bundle, product, name, group_name, texts, spain_price, dry):
     point = _spain_point(sid, spain_price)
     prices = {"ESP": point}
     prices.update({t: pp for t, (pp, _) in _equalized(point).items()})
-    prices.pop("CHN", None)
-    terr = [{"type": "territories", "id": t} for t in prices]
+    # Sold everywhere but China, yet priced in China too: without it the subscription stays in
+    # MISSING_METADATA and review refuses it (IAP_SUBMISSION_NOT_ALLOWED_MISSING_PRICING_DATA, 20-10-2026).
+    terr = [{"type": "territories", "id": t} for t in prices if t != "CHN"]
     if api("GET", f"/v1/subscriptions/{sid}/prices?limit=1")["data"] == []:
-        # Availability first: a price in a territory the subscription is not sold in is refused.
         try:
             api("POST", "/v1/subscriptionAvailabilities", {"data": {"type": "subscriptionAvailabilities",
                 "attributes": {"availableInNewTerritories": True}, "relationships": {
