@@ -11,6 +11,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
     appstore.py adjunto <bundle id> <file>             attachment for App Review (screen recording)
     appstore.py sin-china <bundle id>                  mainland China off (it asks for an ICP number)
     appstore.py nueva   <bundle id> <x.y.z>            create the next version (released on its own once approved)
+    appstore.py eventos <bundle id> <repo> [--dry]     store/events/<name>/ to In-App Events (drafts)
     appstore.py novedades <bundle id> <repo> [--dry]   store/whatsnew/whatsnew-<locale> to What's New
     appstore.py notas   <bundle id> <repo> [--dry]     "Notas para el revisor" of store/formularios.md to App Review notes
     appstore.py version <bundle id> <x.y.z>            version string of the version in preparation
@@ -196,17 +197,20 @@ def _png(path):
     return data
 
 
-def upload(kind, relationships, path):
+def upload(kind, relationships, path, attrs=None):
     """Reserve the asset, PUT the parts Apple asks for, and commit it with its MD5."""
     data = _png(path)
-    r = api("POST", f"/v1/{kind}", {"data": {"type": kind, "attributes": {"fileName": path.name, "fileSize": len(data)},
+    r = api("POST", f"/v1/{kind}", {"data": {"type": kind, "attributes": {"fileName": path.name, "fileSize": len(data),
+                                                                          **(attrs or {})},
                                              "relationships": relationships}})["data"]
     for op in r["attributes"]["uploadOperations"]:
         req = urllib.request.Request(op["url"], data=data[op["offset"]:op["offset"] + op["length"]], method=op["method"],
                                      headers={h["name"]: h["value"] for h in op["requestHeaders"]})
         urllib.request.urlopen(req, timeout=300).read()
-    api("PATCH", f"/v1/{kind}/{r['id']}", {"data": {"type": kind, "id": r["id"], "attributes": {
-        "uploaded": True, "sourceFileChecksum": hashlib.md5(data).hexdigest()}}})
+    # Event screenshots take no checksum.
+    done = {"uploaded": True} if kind == "appEventScreenshots" else {
+        "uploaded": True, "sourceFileChecksum": hashlib.md5(data).hexdigest()}
+    api("PATCH", f"/v1/{kind}/{r['id']}", {"data": {"type": kind, "id": r["id"], "attributes": done}})
 
 
 def capturas(bundle, repo, dry, replace=False):
@@ -320,6 +324,49 @@ def nueva(bundle, number):
         "platform": "IOS", "versionString": number, "releaseType": "AFTER_APPROVAL",
         "copyright": last.get("copyright")}, "relationships": {"app": {"data": {"type": "apps", "id": a}}}}})
     print(f"{bundle}: versión {number} creada")
+
+
+def eventos(bundle, repo, dry):
+    """store/events/<name>/event.json, card.png and details.png to In-App Events, as drafts: sending them
+    to review stays with the owner. event.json: referenceName, badge, purpose, publish/start/end (UTC),
+    excluding (territories without the app) and locales {locale: {name, short, long}}."""
+    a = app_of(bundle)["id"]
+    have = {e["attributes"]["referenceName"]: e for e in get_all(f"/v1/apps/{a}/appEvents")}
+    for d in sorted(p for p in (pathlib.Path(repo) / "store/events").iterdir() if p.is_dir()):
+        ev = json.loads((d / "event.json").read_text(encoding="utf-8"))
+        cur = have.get(ev["referenceName"])
+        if not cur:
+            print(f"{d.name}: evento nuevo")
+            if dry:
+                continue
+            terr = [t["id"] for t in get_all("/v1/territories?limit=200") if t["id"] not in ev["excluding"]]
+            cur = api("POST", "/v1/appEvents", {"data": {"type": "appEvents", "attributes": {
+                "referenceName": ev["referenceName"], "badge": ev["badge"], "purpose": ev["purpose"],
+                "priority": "NORMAL", "purchaseRequirement": "NO_COST_ASSOCIATED", "primaryLocale": "en-US",
+                "territorySchedules": [{"territories": terr, "publishStart": ev["publish"],
+                                        "eventStart": ev["start"], "eventEnd": ev["end"]}]},
+                "relationships": {"app": {"data": {"type": "apps", "id": a}}}}})["data"]
+        else:
+            print(f"{d.name}: ya existe ({cur['attributes']['eventState']})")
+        locs = {l["attributes"]["locale"]: l for l in get_all(f"/v1/appEvents/{cur['id']}/localizations")}
+        for loc, t in ev["locales"].items():
+            _upsert("appEventLocalizations", "appEvent", cur["id"], locs, asc_locale(loc),
+                    {"name": t["name"], "shortDescription": t["short"], "longDescription": t["long"]}, dry)
+        if dry:
+            continue
+        for l in get_all(f"/v1/appEvents/{cur['id']}/localizations"):
+            done = set()
+            for x in get_all(f"/v1/appEventLocalizations/{l['id']}/appEventScreenshots"):
+                if x["attributes"]["assetDeliveryState"]["state"] == "FAILED":  # redo it
+                    api("DELETE", f"/v1/appEventScreenshots/{x['id']}")
+                else:
+                    done.add(x["attributes"]["appEventAssetType"])
+            for kind, name in (("EVENT_CARD", "card.png"), ("EVENT_DETAILS_PAGE", "details.png")):
+                if kind not in done:
+                    print(f"  {l['attributes']['locale']} {kind}")
+                    upload("appEventScreenshots",
+                           {"appEventLocalization": {"data": {"type": "appEventLocalizations", "id": l["id"]}}},
+                           d / name, {"appEventAssetType": kind})
 
 
 def novedades(bundle, repo, dry):
@@ -512,6 +559,8 @@ if __name__ == "__main__":
         sin_china(args[1])
     elif len(args) >= 3 and args[0] == "nueva":
         nueva(args[1], args[2])
+    elif len(args) >= 3 and args[0] == "eventos":
+        eventos(args[1], args[2], "--dry" in sys.argv)
     elif len(args) >= 3 and args[0] == "novedades":
         novedades(args[1], args[2], "--dry" in sys.argv)
     elif len(args) >= 3 and args[0] == "notas":

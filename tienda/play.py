@@ -4,14 +4,15 @@ publishes comes from PLAY_SERVICE_ACCOUNT_JSON (its content, in CI) or ~/keys/pl
 Nothing secret is printed. Production releases never start here: that stays a click in Play Console.
 
     play.py estado <package>                                tracks, AABs and listing languages (read only)
-    play.py ficha  <package> <repo> <web> [--dry]           listings, graphics, screenshots and contact
+    play.py ficha  <package> <repo> <web> [--dry]           listings, graphics, screenshots (phone and tablet) and contact
     play.py aab    <package> <aab> <track> <repo> [draft]   AAB to internal, alpha or beta, notes from
                                                             <repo>/store/whatsnew
 
 Every write goes in one edit, which is atomic: either the whole listing changes or nothing does.
 `--dry` builds the edit, has Play validate it and throws it away. The layout `ficha` reads is the one
 README.md of BaltaJmn/ci describes: store/listings/<locale>, store/play/icon-512.png,
-store/play/feature/<locale>.png and store/screenshots/play/<locale>/*.png. Purchases: compra.py,
+store/play/feature/<locale>.png, store/screenshots/play/<locale>/*.png and, if it exists,
+store/screenshots/tablet/<locale>/*.png. Purchases: compra.py,
 which gives a purchase the same price and texts in both stores.
 """
 import base64, json, os, pathlib, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
@@ -136,6 +137,14 @@ def ficha(package, repo, web, dry):
                 for png in pngs:
                     e.image(d.name, "phoneScreenshots", png)
                 print(f"  {d.name}: {len(pngs)} capturas")
+        # Tablets (10"): the same, when the app has screenshots/tablet/<language>/.
+        for d in _dirs(store / "screenshots/tablet"):
+            pngs = sorted(d.glob("*.png"))
+            if pngs:
+                call("DELETE", f"{e.url}/listings/{d.name}/tenInchScreenshots")
+                for png in pngs:
+                    e.image(d.name, "tenInchScreenshots", png)
+                print(f"  {d.name}: {len(pngs)} capturas de tablet")
 
 
 def aab(package, path, track, repo, status="completed"):

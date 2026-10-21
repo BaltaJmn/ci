@@ -33,6 +33,8 @@ store/play/icon-512.png
 store/play/feature/<idioma>.png                                        en-US obligatorio
 store/screenshots/play/<idioma>/*.png                                  en-US y es-ES como mínimo
 store/screenshots/iphone/<idioma>/*.png                                1320 x 2868, en-US y es-ES
+store/screenshots/tablet/<idioma>/*.png                                opcional, tablet de 10" de Play
+store/events/<evento>/{event.json,card.png,details.png}                opcional, In-App Events (`appstore.py eventos`)
 ```
 
 - **Los mismos idiomas en las dos fichas y en las notas**, con la región siempre (`it-IT`, no `it`):
