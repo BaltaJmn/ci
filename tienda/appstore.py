@@ -327,8 +327,8 @@ def nueva(bundle, number):
 
 
 def eventos(bundle, repo, dry):
-    """store/events/<name>/event.json, card.png and details.png to In-App Events, as drafts: sending them
-    to review stays with the owner. event.json: referenceName, badge, purpose, publish/start/end (UTC),
+    """store/events/<name>/event.json to In-App Events, as drafts (images by the web, see below): sending
+    them to review stays with the owner. event.json: referenceName, badge, purpose, publish/start/end (UTC),
     excluding (territories without the app) and locales {locale: {name, short, long}}."""
     a = app_of(bundle)["id"]
     have = {e["attributes"]["referenceName"]: e for e in get_all(f"/v1/apps/{a}/appEvents")}
@@ -354,19 +354,11 @@ def eventos(bundle, repo, dry):
                     {"name": t["name"], "shortDescription": t["short"], "longDescription": t["long"]}, dry)
         if dry:
             continue
-        for l in get_all(f"/v1/appEvents/{cur['id']}/localizations"):
-            done = set()
-            for x in get_all(f"/v1/appEventLocalizations/{l['id']}/appEventScreenshots"):
-                if x["attributes"]["assetDeliveryState"]["state"] == "FAILED":  # redo it
-                    api("DELETE", f"/v1/appEventScreenshots/{x['id']}")
-                else:
-                    done.add(x["attributes"]["appEventAssetType"])
-            for kind, name in (("EVENT_CARD", "card.png"), ("EVENT_DETAILS_PAGE", "details.png")):
-                if kind not in done:
-                    print(f"  {l['attributes']['locale']} {kind}")
-                    upload("appEventScreenshots",
-                           {"appEventLocalization": {"data": {"type": "appEventLocalizations", "id": l["id"]}}},
-                           d / name, {"appEventAssetType": kind})
+        # The images are not uploaded here: the API refuses new ones (appEventScreenshots is deprecated and
+        # the App Asset Library ends FAILED). Upload card.png and details.png on the en-US localization in
+        # the web of App Store Connect and place them on the other languages with biblioteca.colocar_evento.
+        # Never DELETE appEventScreenshots: it mirrors the placements and removes them.
+        print(f"  imagenes: subir {d.name}/card.png y details.png por la web y colocar con biblioteca.py")
 
 
 def novedades(bundle, repo, dry):
