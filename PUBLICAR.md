@@ -89,7 +89,8 @@ una clave rotada a mano en un solo sitio rompe los demás en silencio.
    `appstore.py build <bundle> <número>` la pone en la versión. `ITSAppUsesNonExemptEncryption = NO` en el `Info.plist`
    evita la pregunta del cifrado. Grupo interno de TestFlight `Equipo` para instalarla en el iPhone.
 10. Envío, en la web: *Añadir a revisión* en la versión, después en la primera compra integrada, y
-   *Enviar a revisión* con los dos dentro. Publicación manual o automática al aprobarla. Estos clics,
+   *Enviar a revisión* con los dos dentro. Publicación manual o automática al aprobarla (las versiones
+   que crea `appstore.py nueva` salen con `AFTER_APPROVAL`; la primera de cada app, a mano). Estos clics,
    y *Cancelar envío*, los hace el titular: el control de permisos de Claude los bloquea aunque se le
    dé permiso en el chat. Claude deja todo comprobado y el navegador en la página.
 

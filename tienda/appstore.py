@@ -10,7 +10,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
     appstore.py captura-suscripcion <bundle id> <product id> <png> [--reemplazar]   review screenshot of a subscription
     appstore.py adjunto <bundle id> <file>             attachment for App Review (screen recording)
     appstore.py sin-china <bundle id>                  mainland China off (it asks for an ICP number)
-    appstore.py nueva   <bundle id> <x.y.z>            create the next version (manual release)
+    appstore.py nueva   <bundle id> <x.y.z>            create the next version (released on its own once approved)
     appstore.py novedades <bundle id> <repo> [--dry]   store/whatsnew/whatsnew-<locale> to What's New
     appstore.py notas   <bundle id> <repo> [--dry]     "Notas para el revisor" of store/formularios.md to App Review notes
     appstore.py version <bundle id> <x.y.z>            version string of the version in preparation
@@ -306,7 +306,7 @@ def version(bundle, number):
 
 
 def nueva(bundle, number):
-    """Creates the version after the one on sale (manual release, same copyright) unless one is
+    """Creates the version after the one on sale (released on its own once approved, same copyright) unless one is
     already in preparation."""
     a = app_of(bundle)["id"]
     vs = get_all(f"/v1/apps/{a}/appStoreVersions?filter[platform]=IOS")
@@ -317,7 +317,7 @@ def nueva(bundle, number):
         return
     last = vs[0]["attributes"]
     api("POST", "/v1/appStoreVersions", {"data": {"type": "appStoreVersions", "attributes": {
-        "platform": "IOS", "versionString": number, "releaseType": "MANUAL",
+        "platform": "IOS", "versionString": number, "releaseType": "AFTER_APPROVAL",
         "copyright": last.get("copyright")}, "relationships": {"app": {"data": {"type": "apps", "id": a}}}}})
     print(f"{bundle}: versión {number} creada")
 
