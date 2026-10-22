@@ -64,12 +64,17 @@ def call(method, url, body=None, data=None, ctype="application/json"):
         data = json.dumps(body).encode()
     req = urllib.request.Request(url, data=data, method=method,
                                  headers={"Authorization": "Bearer " + _token(), "Content-Type": ctype})
-    try:
-        with urllib.request.urlopen(req, timeout=300) as r:
-            out = r.read()
-    except urllib.error.HTTPError as e:
-        raise SystemExit(f"{method} {url.split('/applications/')[-1]} -> {e.code}: "
-                         f"{e.read().decode(errors='replace')[:800]}")
+    # Play contesta 503 de vez en cuando (22-10-2026, al abrir la edicion del tren): dos reintentos.
+    for intento in range(3):
+        try:
+            with urllib.request.urlopen(req, timeout=300) as r:
+                out = r.read()
+            break
+        except urllib.error.HTTPError as e:
+            if e.code >= 500 and intento < 2:
+                time.sleep(30 * (intento + 1)); continue
+            raise SystemExit(f"{method} {url.split('/applications/')[-1]} -> {e.code}: "
+                             f"{e.read().decode(errors='replace')[:800]}")
     return json.loads(out) if out else {}
 
 

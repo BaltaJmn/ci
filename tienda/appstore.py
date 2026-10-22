@@ -82,11 +82,15 @@ def api(method, path, body=None):
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Authorization": "Bearer " + _token(),
                                           "Content-Type": "application/json"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            out = r.read()
-    except urllib.error.HTTPError as e:
-        sys.exit(f"{method} {path} -> {e.code}: {e.read().decode(errors='replace')[:1500]}")
+    for intento in range(3):  # 5xx sueltos de Apple: dos reintentos
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                out = r.read()
+            break
+        except urllib.error.HTTPError as e:
+            if e.code >= 500 and intento < 2:
+                time.sleep(30 * (intento + 1)); continue
+            sys.exit(f"{method} {path} -> {e.code}: {e.read().decode(errors='replace')[:1500]}")
     return json.loads(out) if out else {}
 
 
