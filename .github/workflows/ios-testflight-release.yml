@@ -18,6 +18,14 @@ on:
       java-version:
         type: string
         default: '17'
+      ref:
+        description: Commit or tag to build. Empty, the event's; the train passes the tag it just made.
+        type: string
+        default: ''
+      dry-run:
+        description: Archive and export signed, without uploading anything.
+        type: boolean
+        default: false
     secrets:
       APPSTORE_KEY_ID:
         required: true
@@ -47,6 +55,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
 
       # The "Compile Kotlin Framework" run script phase shells out to ./gradlew, so the JDK has to
       # be on PATH before xcodebuild starts, not inside it.
@@ -96,6 +106,7 @@ jobs:
           PROJECT: ${{ inputs.project }}
           SCHEME: ${{ inputs.scheme }}
           VERSION_FILE: ${{ inputs.version-file }}
+          DESTINATION: ${{ inputs.dry-run && 'export' || 'upload' }}
         run: |
           set -euo pipefail
 
@@ -132,14 +143,14 @@ jobs:
             CURRENT_PROJECT_VERSION="$VERSION_CODE"
 
           # `destination: upload` hands the build straight to App Store Connect, which saves
-          # exporting an ipa only to feed it to another tool.
+          # exporting an ipa only to feed it to another tool. A dry run exports it here instead.
           cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
             <key>method</key><string>app-store-connect</string>
-            <key>destination</key><string>upload</string>
+            <key>destination</key><string>$DESTINATION</string>
             <key>teamID</key><string>$TEAM_ID</string>
             <key>signingStyle</key><string>automatic</string>
             <key>uploadSymbols</key><true/>

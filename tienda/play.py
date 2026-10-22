@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """Google Play from the terminal and from CI, the twin of appstore.py. The service account that
 publishes comes from PLAY_SERVICE_ACCOUNT_JSON (its content, in CI) or ~/keys/play-service-account.json.
-Nothing secret is printed. Production releases never start here: that stays a click in Play Console.
+Nothing secret is printed. From the Mac, production never starts here: that is the weekly train
+(tren.py, from Actions) or a click in Play Console.
 
-    play.py estado <package>                                tracks, AABs and listing languages (read only)
-    play.py ficha  <package> <repo> <web> [--dry]           listings, graphics, screenshots (phone and tablet) and contact
-    play.py aab    <package> <aab> <track> <repo> [draft]   AAB to internal, alpha or beta, notes from
-                                                            <repo>/store/whatsnew
+    play.py estado   <package>                                tracks, AABs and listing languages (read only)
+    play.py ficha    <package> <repo> <web> [--dry]           listings, graphics, screenshots (phone and tablet) and contact
+    play.py aab      <package> <aab> <track> <notes> [draft] [--dry]   AAB to internal, alpha or beta (production
+                                                              only from Actions); <notes> is a repo (its store/whatsnew)
+                                                              or a folder of whatsnew-<locale> files
+    play.py promover <package> <versionCode> [--dry]          the alpha release with that code to production at 100%,
+                                                              with its notes: only the train (tren.py) does this
 
 Every write goes in one edit, which is atomic: either the whole listing changes or nothing does.
-`--dry` builds the edit, has Play validate it and throws it away. The layout `ficha` reads is the one
+`--dry` builds the edit, has Play validate it and throws it away. A commit never cancels a review in
+progress (changesInReviewBehavior=ERROR_IF_IN_REVIEW): Play's default does, and restarts it from zero.
+It fails with CHANGES_ALREADY_IN_REVIEW instead; only promover(cancelar=True) overrides it, for the
+train's own alpha release still in review. The layout `ficha` reads is the one
 README.md of BaltaJmn/ci describes: store/listings/<locale>, store/play/icon-512.png,
 store/play/feature/<locale>.png, store/screenshots/play/<locale>/*.png and, if it exists,
 store/screenshots/tablet/<locale>/*.png. Purchases: compra.py,
@@ -69,8 +76,8 @@ def call(method, url, body=None, data=None, ctype="application/json"):
 class Edit:
     """An edit that is committed only if the block finishes, and deleted otherwise."""
 
-    def __init__(self, package, dry=False):
-        self.base, self.up, self.dry = API + package, UPLOAD + package, dry
+    def __init__(self, package, dry=False, cancelar=False):
+        self.base, self.up, self.dry, self.cancelar = API + package, UPLOAD + package, dry, cancelar
 
     def __enter__(self):
         self.id = call("POST", self.base + "/edits")["id"]
@@ -79,7 +86,8 @@ class Edit:
 
     def __exit__(self, kind, *_):
         if kind is None and not self.dry:
-            call("POST", f"{self.url}:commit")
+            call("POST", f"{self.url}:commit?changesInReviewBehavior="
+                         + ("CANCEL_IN_REVIEW_AND_SUBMIT" if self.cancelar else "ERROR_IF_IN_REVIEW"))
             print("  edición confirmada")
             return
         if kind is None:
@@ -98,6 +106,16 @@ def _read(p):
 
 def _dirs(p):
     return sorted(d for d in p.iterdir() if d.is_dir()) if p.is_dir() else []
+
+
+def tracks(package):
+    """{track: releases} as Play has them now. Production shows the release last sent, also while it
+    is in review: whether it is live only shows in Play Console (Publishing overview)."""
+    url = f"{API}{package}/edits/" + call("POST", API + package + "/edits")["id"]
+    try:
+        return {t["track"]: t.get("releases", []) for t in call("GET", url + "/tracks").get("tracks", [])}
+    finally:
+        call("DELETE", url)
 
 
 def estado(package):
@@ -147,18 +165,33 @@ def ficha(package, repo, web, dry):
                 print(f"  {d.name}: {len(pngs)} capturas de tablet")
 
 
-def aab(package, path, track, repo, status="completed"):
-    if track not in ("internal", "alpha", "beta"):
-        sys.exit(f"Canal {track} no permitido: producción se publica desde Play Console.")
-    notes = [{"language": f.name.removeprefix("whatsnew-"), "text": _read(f)}
-             for f in sorted((pathlib.Path(repo) / "store/whatsnew").glob("whatsnew-*"))]
-    with Edit(package) as e:
+def aab(package, path, track, notes, status="completed", dry=False):
+    if track not in ("internal", "alpha", "beta") and not (track == "production" and os.environ.get("GITHUB_ACTIONS")):
+        sys.exit(f"Canal {track} no permitido: producción sale con el tren de los lunes o desde Play Console.")
+    d = pathlib.Path(notes)
+    d = d / "store/whatsnew" if (d / "store/whatsnew").is_dir() else d
+    notes = [{"language": f.name.removeprefix("whatsnew-"), "text": _read(f)} for f in sorted(d.glob("whatsnew-*"))]
+    with Edit(package, dry) as e:
         vc = call("POST", f"{e.up}/edits/{e.id}/bundles?uploadType=media", data=pathlib.Path(path).read_bytes(),
                   ctype="application/octet-stream")["versionCode"]
         print(f"  AAB subido: versionCode {vc}")
         call("PUT", f"{e.url}/tracks/{track}", {"track": track, "releases": [
             {"versionCodes": [str(vc)], "status": status, "releaseNotes": notes}]})
         print(f"  canal {track}, {status}, notas en {len(notes)} idiomas")
+
+
+def promover(package, code, cancelar=False, dry=False):
+    """The weekly train: the alpha release with versionCode `code` to production at 100%, with the same
+    notes, without rebuilding. `cancelar`: only when what is in review is that same alpha release."""
+    with Edit(package, dry, cancelar) as e:
+        rel = next((r for r in call("GET", e.url + "/tracks/alpha").get("releases", [])
+                    if str(code) in r.get("versionCodes", [])), None)
+        if not rel:
+            raise SystemExit(f"{code} no está en alpha: el domingo no se subió")
+        new = {"versionCodes": [str(code)], "status": "completed", "releaseNotes": rel.get("releaseNotes", [])}
+        call("PUT", e.url + "/tracks/production", {"track": "production", "releases": [
+            {**new, "name": rel["name"]} if rel.get("name") else new]})
+        print(f"  producción: {code} al 100 %, notas en {len(new['releaseNotes'])} idiomas")
 
 
 def money(amount, currency):
@@ -252,6 +285,8 @@ if __name__ == "__main__":
     elif len(a) == 4 and a[0] == "ficha":
         ficha(a[1], a[2], a[3], dry)
     elif len(a) in (5, 6) and a[0] == "aab":
-        aab(a[1], a[2], a[3], a[4], "draft" if a[5:] == ["draft"] else "completed")
+        aab(a[1], a[2], a[3], a[4], "draft" if a[5:] == ["draft"] else "completed", dry)
+    elif len(a) == 3 and a[0] == "promover":
+        promover(a[1], a[2], dry=dry)
     else:
         print(__doc__)

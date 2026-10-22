@@ -40,7 +40,11 @@ def check(repo):
                     errors.append(f"{p.relative_to(store)}: {n}, el tope es {top}" if text else f"falta {p.relative_to(store)}")
     notes = sorted((store / "whatsnew").glob("whatsnew-*"))
     locales["notas"] = {p.name.removeprefix("whatsnew-") for p in notes}
-    for p in notes:
+    # The generic notes of the weekly train (tren.py), for a week nobody touched store/whatsnew.
+    generic = sorted((store / "whatsnew-generic").glob("whatsnew-*"))
+    if generic:
+        locales["notas genéricas"] = {p.name.removeprefix("whatsnew-") for p in generic}
+    for p in notes + generic:
         n = len(p.read_text(encoding="utf-8").strip())
         if not n or n > WHATSNEW:
             errors.append(f"{p.relative_to(store)}: {n}, el tope es {WHATSNEW}")

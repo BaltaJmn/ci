@@ -39,6 +39,14 @@ on:
           Play rechaza cualquier otro estado en una app en borrador.
         type: string
         default: completed
+      ref:
+        description: Commit o etiqueta que construir. Vacio, el del evento; el tren pasa la etiqueta que acaba de crear.
+        type: string
+        default: ''
+      dry-run:
+        description: Construye y comprueba la firma; Play solo valida la edicion y la tira, sin subir nada.
+        type: boolean
+        default: false
     secrets:
       KEYSTORE_BASE64:
         required: true
@@ -65,6 +73,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-java@v5
         with:
@@ -142,23 +152,29 @@ jobs:
           grep -qF "$SIGNER_CN" signature.txt \
             || { echo "::error::bundle is not signed with the upload key"; exit 1; }
 
-      # Antes de la accion de terceros, no despues. Esa accion recibe el mismo
-      # directorio de trabajo y no tiene ninguna razon para encontrarse la clave.
+      # La subida no la necesita: fuera antes de seguir.
       - name: Borrar la clave
         run: rm -f upload.jks keystore.properties
 
-      # Fijada a un commit y no a la etiqueta movil v1: recibe la cuenta de servicio
-      # que publica, con permisos de cuenta sobre todas las apps. Para actualizar,
-      # el SHA de la version nueva y su etiqueta en el comentario.
-      - uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+      # Con play.py y no con una accion de terceros: confirma la edicion con
+      # ERROR_IF_IN_REVIEW. Lo que hace Play por defecto es cancelar la revision en
+      # curso y empezarla de cero, tambien la de produccion al subir a alpha.
+      - uses: actions/checkout@v5
         with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: ${{ inputs.package-name }}
-          releaseFiles: ${{ inputs.aab-path }}
-          # tracks y no track: el singular esta deprecado en la accion y avisa en cada ejecucion.
-          tracks: ${{ inputs.track }}
-          status: ${{ inputs.status }}
-          whatsNewDirectory: ${{ inputs.whatsnew-dir }}
+          repository: BaltaJmn/ci
+          path: .ci
+
+      - name: Subir a Play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          PACKAGE: ${{ inputs.package-name }}
+          AAB_PATH: ${{ inputs.aab-path }}
+          TRACK: ${{ inputs.track }}
+          STATUS: ${{ inputs.status }}
+          WHATSNEW_DIR: ${{ inputs.whatsnew-dir }}
+          DRY: ${{ inputs.dry-run && '--dry' || '' }}
+        # Sin carpeta de notas, una que no existe: la version sale sin notas.
+        run: python3 .ci/tienda/play.py aab "$PACKAGE" "$AAB_PATH" "$TRACK" "${WHATSNEW_DIR:-sin-notas}" "$STATUS" $DRY
 
       - name: Asegurar que la clave no queda ni fallando
         if: always()

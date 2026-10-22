@@ -1,0 +1,230 @@
+name: Tren de versiones
+
+# Workflow reutilizable: lo llama el tren.yml de cada app, el domingo, de madrugada y el lunes
+# (PUBLICAR.md, seccion 7). La logica esta en tienda/tren.py; aqui solo el orden de los trabajos.
+# Domingo: plan (numera, commit y etiqueta) > subidas a Play alpha y TestFlight con esa etiqueta >
+# aviso con el boton de parar. Las subidas son llamadas a los otros workflows de este repositorio y
+# no un push de etiqueta: lo que empuja GITHUB_TOKEN no dispara otros workflows.
+on:
+  workflow_call:
+    inputs:
+      paso:
+        description: domingo, eco o lunes
+        type: string
+        required: true
+      seco:
+        description: Prueba de punta a punta sin publicar nada (PUBLICAR.md 7)
+        type: boolean
+        default: false
+      app:
+        description: Nombre en los avisos
+        type: string
+        required: true
+      clave:
+        description: Nombre corto en las ordenes de parar y en los mensajes del topic
+        type: string
+        required: true
+      package-name:
+        type: string
+        required: true
+      bundle-id:
+        type: string
+        required: true
+      version-file:
+        type: string
+        default: androidApp/build.gradle.kts
+      signer-cn:
+        type: string
+        default: CN=Baltasar
+      gradle-tasks:
+        type: string
+        default: ':androidApp:bundleRelease'
+      aab-path:
+        type: string
+        default: androidApp/build/outputs/bundle/release/androidApp-release.aab
+    secrets:
+      KEYSTORE_BASE64:
+        required: true
+      KEYSTORE_PASSWORD:
+        required: true
+      KEY_ALIAS:
+        required: true
+      KEY_PASSWORD:
+        required: true
+      PLAY_SERVICE_ACCOUNT_JSON:
+        required: true
+      APPSTORE_KEY_ID:
+        required: true
+      APPSTORE_ISSUER_ID:
+        required: true
+      APPSTORE_PRIVATE_KEY:
+        required: true
+      APPLE_TEAM_ID:
+        required: true
+      APPLE_DEVELOPMENT_P12:
+        required: true
+      APPLE_DEVELOPMENT_P12_PASSWORD:
+        required: true
+      APPLE_DISTRIBUTION_P12:
+        required: true
+      APPLE_DISTRIBUTION_P12_PASSWORD:
+        required: true
+      NTFY_TOPIC:
+        required: true
+      NTFY_TOPIC_APROBAR:
+        required: true
+
+jobs:
+  plan:
+    if: inputs.paso == 'domingo'
+    runs-on: ubuntu-latest
+    # Empuja el commit de la version y su etiqueta (en seco, la rama tren-seco).
+    permissions:
+      contents: write
+    outputs:
+      ref: ${{ steps.plan.outputs.ref }}
+      play: ${{ steps.plan.outputs.play }}
+      ios: ${{ steps.plan.outputs.ios }}
+      notas-play: ${{ steps.plan.outputs.notas-play }}
+      aviso: ${{ steps.plan.outputs.aviso }}
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v5
+        with:
+          repository: BaltaJmn/ci
+          path: .ci
+      # Las entradas van por el entorno, nunca interpoladas en el script.
+      - id: plan
+        env: &entorno
+          APP: ${{ inputs.app }}
+          CLAVE: ${{ inputs.clave }}
+          PAQUETE: ${{ inputs.package-name }}
+          BUNDLE: ${{ inputs.bundle-id }}
+          VERSION_FILE: ${{ inputs.version-file }}
+          SECO: ${{ inputs.seco }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+        run: python3 .ci/tienda/tren.py domingo .
+      - if: failure()
+        env: *entorno
+        run: python3 .ci/tienda/tren.py fallo domingo
+
+  play:
+    needs: plan
+    if: needs.plan.outputs.play == 'true'
+    uses: BaltaJmn/ci/.github/workflows/android-play-release.yml@main
+    with:
+      package-name: ${{ inputs.package-name }}
+      signer-cn: ${{ inputs.signer-cn }}
+      gradle-tasks: ${{ inputs.gradle-tasks }}
+      aab-path: ${{ inputs.aab-path }}
+      track: alpha
+      whatsnew-dir: ${{ needs.plan.outputs.notas-play }}
+      ref: ${{ needs.plan.outputs.ref }}
+      dry-run: ${{ inputs.seco }}
+    secrets:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+
+  ios:
+    needs: plan
+    if: needs.plan.outputs.ios == 'true'
+    uses: BaltaJmn/ci/.github/workflows/ios-testflight-release.yml@main
+    with:
+      version-file: ${{ inputs.version-file }}
+      ref: ${{ needs.plan.outputs.ref }}
+      dry-run: ${{ inputs.seco }}
+    secrets:
+      APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+      APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+      APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_DEVELOPMENT_P12: ${{ secrets.APPLE_DEVELOPMENT_P12 }}
+      APPLE_DEVELOPMENT_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPMENT_P12_PASSWORD }}
+      APPLE_DISTRIBUTION_P12: ${{ secrets.APPLE_DISTRIBUTION_P12 }}
+      APPLE_DISTRIBUTION_P12_PASSWORD: ${{ secrets.APPLE_DISTRIBUTION_P12_PASSWORD }}
+
+  # Despues de las subidas, salgan bien o mal: el aviso dice que tienda sale y cual no.
+  aviso:
+    needs: [plan, play, ios]
+    if: always() && needs.plan.outputs.aviso == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: BaltaJmn/ci
+          path: .ci
+      - env:
+          APP: ${{ inputs.app }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
+          PLAN: ${{ needs.plan.outputs.plan }}
+          PLAY_RESULT: ${{ needs.play.result }}
+          IOS_RESULT: ${{ needs.ios.result }}
+        run: python3 .ci/tienda/tren.py aviso
+      - if: inputs.seco
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/tren-seco" || true
+
+  eco:
+    if: inputs.paso == 'eco'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          repository: BaltaJmn/ci
+          path: .ci
+      - env:
+          APP: ${{ inputs.app }}
+          CLAVE: ${{ inputs.clave }}
+          SECO: ${{ inputs.seco }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
+        run: python3 .ci/tienda/tren.py eco
+
+  lunes:
+    if: inputs.paso == 'lunes'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/checkout@v5
+        with:
+          repository: BaltaJmn/ci
+          path: .ci
+      # Con su propio Python: Pillow quita el canal alfa de las capturas, que Apple rechaza.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install --quiet pillow
+      - env: &entorno-lunes
+          APP: ${{ inputs.app }}
+          CLAVE: ${{ inputs.clave }}
+          PAQUETE: ${{ inputs.package-name }}
+          BUNDLE: ${{ inputs.bundle-id }}
+          VERSION_FILE: ${{ inputs.version-file }}
+          SECO: ${{ inputs.seco }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
+        run: python3 .ci/tienda/tren.py lunes .
+      - if: failure()
+        env: *entorno-lunes
+        run: python3 .ci/tienda/tren.py fallo lunes

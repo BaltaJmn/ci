@@ -16,13 +16,15 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
     appstore.py notas   <bundle id> <repo> [--dry]     "Notas para el revisor" of store/formularios.md to App Review notes
     appstore.py version <bundle id> <x.y.z>            version string of the version in preparation
     appstore.py build <bundle id> <build number>       attach a processed build to that version
+    appstore.py enviar <bundle id> [--dry]             send the version in preparation to App Review: only the
+                                                       weekly train (tren.py) does this
     Purchases: compra.py, which sets the same price and texts in both stores.
 
 `ficha` creates the missing locales and patches the ones that differ; support and privacy URLs are
 the ones the en-US locale already has. `capturas` only fills locales that have no 6,9" screenshots,
-and deletes nothing unless `--reemplazar`, which swaps the ones of every locale that has a folder. Folder names may carry a region Apple does not use (it-IT is `it`). Sending to
-review stays in the web: the first non-consumable purchase of an app can only go in the same
-submission as a version, and the API does not add it.
+and deletes nothing unless `--reemplazar`, which swaps the ones of every locale that has a folder. Folder names may carry a region Apple does not use (it-IT is `it`). By hand,
+sending to review stays in the web: the first non-consumable purchase of an app can only go in the
+same submission as a version, and the API does not add it. `enviar` is for the train's versions.
 """
 import base64, hashlib, io, json, os, pathlib, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
@@ -361,11 +363,12 @@ def eventos(bundle, repo, dry):
         print(f"  imagenes: subir {d.name}/card.png y details.png por la web y colocar con biblioteca.py")
 
 
-def novedades(bundle, repo, dry):
-    """store/whatsnew/whatsnew-<locale> (the files Play reads) to the What's New of the version."""
+def novedades(bundle, repo, dry, carpeta="store/whatsnew"):
+    """store/whatsnew/whatsnew-<locale> (the files Play reads) to the What's New of the version.
+    `carpeta`: another folder of the repo with the same files (the train's generic notes)."""
     v, _ = editable(app_of(bundle)["id"])
     vlocs = {l["attributes"]["locale"]: l for l in get_all(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")}
-    for f in sorted((pathlib.Path(repo) / "store/whatsnew").glob("whatsnew-*")):
+    for f in sorted((pathlib.Path(repo) / carpeta).glob("whatsnew-*")):
         _upsert("appStoreVersionLocalizations", "appStoreVersion", v["id"], vlocs,
                 asc_locale(f.name.removeprefix("whatsnew-")), {"whatsNew": _read(f)}, dry)
 
@@ -386,12 +389,43 @@ def notas(bundle, repo, dry):
             api("PATCH", f"/v1/appStoreReviewDetails/{rd['id']}", {"data": {
                 "type": "appStoreReviewDetails", "id": rd["id"], "attributes": {"notes": block}}})
         else:
+            # A version made by the API comes without review details: contact and sign-in data are copied
+            # from the newest version that has them, or App Review refuses the submission.
+            prev = {}
+            for o in get_all(f"/v1/apps/{app_of(bundle)['id']}/appStoreVersions?filter[platform]=IOS&limit=10"):
+                d = api("GET", f"/v1/appStoreVersions/{o['id']}/appStoreReviewDetail")["data"] if o["id"] != v["id"] else None
+                if d:
+                    prev = {k: x for k, x in d["attributes"].items() if k.startswith(("contact", "demoAccount")) and x is not None}
+                    break
             api("POST", "/v1/appStoreReviewDetails", {"data": {"type": "appStoreReviewDetails",
-                "attributes": {"notes": block}, "relationships": {"appStoreVersion": {
+                "attributes": {**prev, "notes": block}, "relationships": {"appStoreVersion": {
                     "data": {"type": "appStoreVersions", "id": v["id"]}}}}})
         print(f"  notas: {len(block)} caracteres")
     else:
         print(f"  notas: cambian ({len(block)} caracteres)")
+
+
+def enviar(bundle, dry):
+    """The version in preparation to App Review, in the draft submission if there is one (In-App Events
+    waiting for a version go along) or in a new one. Released on its own once approved (`nueva`)."""
+    a = app_of(bundle)["id"]
+    v, _ = editable(a)
+    if not api("GET", f"/v1/appStoreVersions/{v['id']}/build")["data"]:
+        sys.exit(f"{v['attributes']['versionString']}: sin build, no se envía")
+    subs = get_all(f"/v1/reviewSubmissions?filter[app]={a}&filter[state]=READY_FOR_REVIEW")
+    print(f"  {v['attributes']['versionString']}: a revisión en {'el borrador ' + subs[0]['id'] if subs else 'un envío nuevo'}")
+    if dry:
+        return
+    s = subs[0] if subs else api("POST", "/v1/reviewSubmissions", {"data": {"type": "reviewSubmissions",
+        "attributes": {"platform": "IOS"}, "relationships": {"app": {"data": {"type": "apps", "id": a}}}}})["data"]
+    items = get_all(f"/v1/reviewSubmissions/{s['id']}/items?include=appStoreVersion")
+    if not any((i["relationships"].get("appStoreVersion", {}).get("data") or {}).get("id") == v["id"] for i in items):
+        api("POST", "/v1/reviewSubmissionItems", {"data": {"type": "reviewSubmissionItems", "relationships": {
+            "reviewSubmission": {"data": {"type": "reviewSubmissions", "id": s["id"]}},
+            "appStoreVersion": {"data": {"type": "appStoreVersions", "id": v["id"]}}}}})
+    api("PATCH", f"/v1/reviewSubmissions/{s['id']}", {"data": {"type": "reviewSubmissions", "id": s["id"],
+                                                               "attributes": {"submitted": True}}})
+    print(f"  {v['attributes']['versionString']}: enviada a revisión")
 
 
 def purchase(bundle, product):
@@ -561,5 +595,7 @@ if __name__ == "__main__":
         version(args[1], args[2])
     elif len(args) >= 3 and args[0] == "build":
         build(args[1], args[2])
+    elif len(args) >= 2 and args[0] == "enviar":
+        enviar(args[1], "--dry" in sys.argv)
     else:
         print(__doc__)
