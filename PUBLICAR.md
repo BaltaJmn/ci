@@ -11,8 +11,13 @@ copian están en `~/keys/LEEME.md`, fuera de cualquier repositorio.
   `CURRENT_PROJECT_VERSION` de iOS. Los workflows los leen del fichero de Android (`version-file`),
   así que no se pueden separar.
 - `git tag vX.Y && git push origin vX.Y` lanza `release.yml`, que sube a Play (canal `alpha`) y a
-  TestFlight con dos llamadas a los workflows de este repositorio. Las cuatro apps igual, también las
-  que ya están en producción: producción en Play y el envío a revisión de Apple se hacen a mano.
+  TestFlight con dos llamadas a los workflows de este repositorio. FlowTime y Chroma ya no van así:
+  salen con el tren de los lunes (sección 7), y entre semana nadie pone etiquetas. En las demás,
+  producción en Play y el envío a revisión de Apple se hacen a mano.
+- Ninguna edición de Play cancela una revisión en curso: `play.py` confirma con
+  `changesInReviewBehavior=ERROR_IF_IN_REVIEW` y falla con `CHANGES_ALREADY_IN_REVIEW`. Lo que hace
+  Play por defecto (y la acción `r0adkll/upload-google-play`, que se usaba hasta el 22-10-2026) es
+  cancelarla y empezarla de cero, también la de producción al subir a `alpha` o al cambiar la ficha.
 - Un `versionCode` no se reutiliza nunca: Play y App Store Connect rechazan un build repetido.
 - Sin Actions, lo mismo desde el Mac: `~/keys/play.sh aab` y `~/keys/testflight.sh`, que son
   `tienda/play.py` y `tienda/testflight.sh` de este repositorio.
@@ -191,3 +196,61 @@ La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 c
 "Lista" quiere decir: textos en todos los idiomas, capturas de 6,9", compras en `READY_TO_SUBMIT`
 con su captura para la revisión, privacidad publicada, China fuera, idioma principal inglés y
 RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la oferta actual).
+
+## 7. El tren de los lunes (FlowTime y Chroma, desde el 26-10-2026)
+
+Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance. Lo decidió el usuario
+el 22-10-2026 porque se enviaban versiones encima de otras aún en revisión y cada una reiniciaba la
+revisión de la anterior. `tren.yml` de cada app (igual en todas salvo `with:`) llama a
+`.github/workflows/tren.yml` de este repositorio, y la lógica vive en `tienda/tren.py`. Relojes en
+GitHub Actions, con `timezone: Europe/Madrid` (el cambio de hora lo pone GitHub) y minutos raros: a
+la hora en punto GitHub retrasa, y puede tirar, las ejecuciones programadas.
+
+| Cuándo | Qué hace |
+|---|---|
+| Domingo 19:37 | Si hay cambios en main desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`), sube la minor y el `versionCode`, deja el commit `tren: <App> X.Y.0 (N)` y la etiqueta `vX.Y.0`, y llama a `android-play-release.yml` (canal `alpha`) y a `ios-testflight-release.yml` con `ref` de esa etiqueta: lo que empuja `GITHUB_TOKEN` no dispara otros workflows. Al acabar, ntfy "Mañana sale <App> X.Y.0" con las novedades, qué tienda sale y cuál no y por qué, y el botón "Parar esta semana" |
+| Lunes 1:17 | Eco: vuelve a publicar las órdenes de parar. ntfy.sh guarda 12 h, y una pulsada el domingo a las 20:00 ya no estaría a las 9:00 |
+| Lunes 9:07 | Si no hay orden de parar para esa versión, por tienda: Play, la release de `alpha` a producción al 100 % con sus notas (`play.py promover`, sin recompilar); App Store, `nueva` (publicación al aprobarse), ficha, capturas de iPhone si cambiaron desde la versión que tiene la tienda, novedades, notas y contacto de revisión, build y `enviar` (reviewSubmissions; si hay un borrador de envío, por ejemplo con In-App Events, va en él). ntfy con lo que salió y lo que no |
+
+**Una tienda se salta la semana** si tiene la versión anterior en revisión, rechazada o sin publicar,
+y el aviso dice por qué y qué hacer. Si las dos están bloqueadas el domingo, no se gasta número. Una
+versión parada o que no salió en una tienda se vuelve a anunciar el domingo siguiente si no hay nada
+nuevo; si lo hay, sale la siguiente minor.
+
+- **App Store**: el estado de cada versión, por la API. Bloquea todo lo que no sea a la venta,
+  reemplazada, retirada o en preparación sin enviar (`LIBRE_IOS` de `tren.py`).
+- **Play**: la API no dice si algo está en revisión (producción enseña la última enviada, aprobada o
+  no). Lo lee el GK35 en *Resumen de publicación* con `TikTok/versiones.mjs play` (domingo 19:15 y cada
+  día 8:45, navegador de solo lectura) y lo publica en el topic secreto como `tren-play <paquete>
+  <json>`. Sin lectura de menos de 3 h, Play se salta la semana. El lunes, si lo único en revisión es
+  la `alpha` del propio tren, se promociona igual (cancela esa revisión y la reenvía con producción);
+  en cualquier otro caso, `ERROR_IF_IN_REVIEW` es la red: Play no pisa nada aunque la lectura falle.
+
+**Números.** El mismo `versionName` y `versionCode` en las dos tiendas (el fichero de versión de
+Android). Cada tren sube la minor (`2.5.0` a `2.6.0`) y el `versionCode` desde el que haya en main:
+entre semana el `versionCode` solo sube para una build de prueba de TestFlight sin etiqueta
+(`release.yml -f stores=app-store`), y nadie toca `versionName` ni pone etiquetas. La patch es para arreglos urgentes, a mano y
+solo con el sí del usuario: commit con la versión, etiqueta `vX.Y.Z` (que sí lanza `release.yml`) y
+`gh workflow run tren.yml -f paso=lunes -f seco=false` para sacarla.
+
+**Novedades.** `store/whatsnew` de cada repo, en todos sus idiomas, valen para las dos tiendas. Quien
+cambia algo visible las reescribe en el mismo commit. Por tienda: si no cambiaron desde la versión que
+esa tienda tiene, salen las genéricas de `store/whatsnew-generic` ("Arreglos y mejoras") y el aviso
+del domingo lo dice. Las de Play se fijan al subir a `alpha` el domingo; las de Apple salen de la
+etiqueta, no de main.
+
+**El topic secreto** (`ntfy-topic-aprobar`, el de los botones de `TikTok/lote.mjs`, que ignora estas
+líneas) lleva: `parar tren <clave> <versión>` (el botón), `tren-play <paquete> <json>` (GK35),
+`tren-plan <clave> <json>` y `tren-lunes <clave> <json>` (el tren, para la tabla *Versiones* de
+semana.baltajmn.dev, que pinta `versiones.mjs`). Secretos `NTFY_TOPIC` y `NTFY_TOPIC_APROBAR` en cada
+repo (`~/keys/LEEME.md`).
+
+**En seco** (`gh workflow run tren.yml -f paso=domingo|eco|lunes`, `seco` marcado por defecto): la
+versión nueva va a la rama `tren-seco` (se borra al acabar), Play solo valida la edición, el archive
+de iOS se exporta sin subir, nada cambia en App Store Connect, los avisos dicen PRUEBA y el botón
+publica `parar prueba ...`, que el tren de verdad no lee. Ni etiqueta ni mensajes para semana.
+
+**Si algo falla**, el aviso lo dice con el paso y la orden para relanzarlo. Sin aviso el domingo
+por la noche ni el lunes por la mañana, GitHub no lanzó la ejecución: `gh run list -R
+BaltaJmn/<repo> --workflow tren.yml` y, si falta, `gh workflow run tren.yml -R BaltaJmn/<repo> -f
+paso=<paso> -f seco=false`.

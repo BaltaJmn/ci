@@ -18,9 +18,11 @@ bajo `with:` (paquete, CN de la firma, tareas de Gradle, ruta del AAB, fichero d
 |---|---|---|
 | `.github/workflows/release.yml` | Etiqueta `v*`, o a mano | Play (canal `alpha`) y TestFlight con la misma versión |
 | `.github/workflows/listings.yml` | Push a `store/`, o a mano | Comprueba `store/`; a mano, sube la ficha a Play, a la App Store o a las dos |
+| `.github/workflows/tren.yml` | Domingo 19:37, lunes 1:17 y 9:07 (Madrid), o a mano | El tren de versiones de los lunes (FlowTime y Chroma): `PUBLICAR.md` sección 7 |
 
-Una etiqueta sube siempre a los canales de prueba de las dos tiendas. Producción en Play y el envío a
-revisión de Apple son siempre de una persona, en cada consola. A mano se puede elegir otro canal de
+Una etiqueta sube siempre a los canales de prueba de las dos tiendas. En las apps con tren, producción
+en Play y el envío a revisión de Apple los hace el tren los lunes, con aviso y botón de parar el domingo;
+en las demás, una persona en cada consola. A mano se puede elegir otro canal de
 Play, `status: draft` (app que nunca publicó) o solo una tienda (`stores`).
 
 Y la misma carpeta `store/`, que `tienda/comprobar.py` vigila en cada push:
@@ -28,7 +30,8 @@ Y la misma carpeta `store/`, que `tienda/comprobar.py` vigila en cada push:
 ```
 store/listings/<idioma>/{title,short,full}.txt                         ficha de Play
 store/app-store/<idioma>/{name,subtitle,keywords,promo,description}.txt  ficha de la App Store
-store/whatsnew/whatsnew-<idioma>                                       notas de versión de Play
+store/whatsnew/whatsnew-<idioma>                                       notas de versión de las dos tiendas
+store/whatsnew-generic/whatsnew-<idioma>                               las del tren cuando nadie tocó las de arriba
 store/play/icon-512.png
 store/play/feature/<idioma>.png                                        en-US obligatorio
 store/screenshots/play/<idioma>/*.png                                  en-US y es-ES como mínimo
@@ -67,6 +70,11 @@ Si el build de la app genera configuración a partir del entorno, se le pasan la
 secreto opcional `BUILD_ENV`, una `KEY=VALUE` por línea. Va como secreto y no como entrada porque las
 entradas aparecen en claro en el log, y el workflow las enmascara antes de exportarlas.
 
+Sube con `tienda/play.py`, que confirma la edición con `ERROR_IF_IN_REVIEW`: si algo de la app está en
+revisión, falla en vez de cancelar esa revisión (lo que hace Play por defecto, y la acción de terceros que
+se usaba antes). `ref` construye otro commit o etiqueta (el tren pasa la suya) y `dry-run` deja que Play
+valide la edición sin confirmarla.
+
 `signer-cn` por defecto es `CN=Baltasar`; cada app pasa el suyo, porque las claves de subida no
 comparten CN y la comprobación rechazaría un paquete bien firmado. Se mira con `keytool -printcert
 -jarfile <aab>`, línea `Owner`.
@@ -98,7 +106,13 @@ Los dos `.p12` son a propósito, y cada uno evita un fallo distinto:
   de cumplir su propio requisito y App Store Connect la rechaza con ITMS-90035.
 
 Los perfiles sí los sigue creando Xcode con la clave de la API: ningún `.mobileprovision` vive en un
-secreto. Los certificados, su contraseña y cómo se renuevan están en `~/keys/LEEME.md`.
+secreto. `ref` y `dry-run` como en el de Play: en seco, el archive se exporta firmado y no se sube. Los certificados, su contraseña y cómo se renuevan están en `~/keys/LEEME.md`.
+
+### `tren.yml`
+
+El tren de los lunes, entero: `plan` (numera, commit y etiqueta), las dos subidas con `ref` de esa
+etiqueta, `aviso`, `eco` y `lunes`. Entradas: `paso`, `seco`, `app`, `clave` y los valores de
+`release.yml`. Secretos: los de las dos subidas más `NTFY_TOPIC` y `NTFY_TOPIC_APROBAR`.
 
 ### `store-listings.yml`
 
@@ -117,8 +131,9 @@ Actions. Leen las credenciales del entorno en CI y del Llavero y `~/keys` en el 
 | Script | Para |
 |---|---|
 | `comprobar.py <repo>` | El contrato de `store/`: idiomas iguales, topes de cada tienda, gráficos y capturas |
-| `play.py estado\|ficha\|aab` | Play: canales y fichas; la ficha entera en una edición (`--dry` la valida y la tira); un AAB a un canal de prueba |
-| `appstore.py estado\|ficha\|capturas\|...` | App Store Connect: qué falta antes de enviar, ficha, capturas, compras, adjuntos, versión y build |
+| `play.py estado\|ficha\|aab\|promover` | Play: canales y fichas; la ficha entera en una edición (`--dry` la valida y la tira); un AAB a un canal de prueba; `promover`, la `alpha` a producción (solo el tren) |
+| `appstore.py estado\|ficha\|capturas\|...\|enviar` | App Store Connect: qué falta antes de enviar, ficha, capturas, compras, adjuntos, versión, build y `enviar` a revisión (solo el tren) |
+| `tren.py domingo\|aviso\|eco\|lunes\|--prueba` | El tren de los lunes (`PUBLICAR.md` 7); `--prueba` comprueba la lógica sin red |
 | `compra.py <paquete> <producto Play> <producto Apple> [precio]` | La compra igual en las dos tiendas: textos de Apple copiados a Play y, con precio, base en España e igualación de Apple aplicada a Play donde la moneda coincide |
 | `compra.py --suscripcion <paquete> <suscripción Play> <producto Apple> <precio> <compra vitalicia> <traducciones.json> [--dry]` | La suscripción mensual en las dos tiendas: grupo Pro y precios por territorio en Apple, plan base `monthly` en Play, textos en todos los idiomas. Se puede repetir: completa lo que falte |
 | `revenuecat.py suscripcion <app> <paquete> <producto Play> <plan base>` | Productos en las dos apps de RevenueCat, unidos a `pro` y al paquete `$rc_monthly` de `default` |
