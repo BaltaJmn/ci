@@ -294,7 +294,9 @@ def linea(tienda, t, resultado, code):
 
 
 def aviso():
+    global SECO
     p = json.loads(pathlib.Path(env("PLAN_FILE")).read_text(encoding="utf-8"))
+    SECO = p["seco"]  # the stop button of a dry notice says "parar prueba"
     res = {"play": os.environ.get("PLAY_RESULT", ""), "ios": os.environ.get("IOS_RESULT", "")}
     lineas = [linea("Google Play", p["play"], res["play"], p["code"]), linea("iPhone", p["ios"], res["ios"], p["code"])]
     for k in ("play", "ios"):  # a failed upload means that store does not go out on Monday
@@ -305,13 +307,13 @@ def aviso():
                  else f"Novedades en Play {nota(n['play'])}\nNovedades en iPhone {nota(n['ios'])}")
     pre = "PRUEBA, no sale nada de verdad. " if p["seco"] else ""
     if p["play"]["sale"] or p["ios"]["sale"]:
-        tiendas = " y ".join(t for t, k in (("Google Play", "play"), ("iPhone", "ios")) if p[k]["sale"])
+        que = [x for x, k in (("en Google Play, a produccion al 100 %", "play"), ("en iPhone, a revision de Apple, que la publica sola al aprobarla", "ios")) if p[k]["sale"]]
         msg = {"title": f"{pre}Mañana sale {p['app']} {p['version']}", "priority": 4,
                "message": f"{novedades}\n\n" + "\n".join(lineas) + "\n\n"
                f"Por que: es el tren semanal. El domingo se prepara lo que hay en main ({p['cambios']} ficheros cambiados desde la {p['ultima'].lstrip('v')}) "
-               f"y el lunes a las 9:00 sale en {tiendas}: produccion al 100 % en Play y revision en Apple, que la publica sola al aprobarla.\n"
+               f"y el lunes a las 9:00 sale {' y '.join(que)}.\n"
                "Que hacer: nada si te parece bien. 'Parar esta semana' la frena en las dos tiendas hasta el domingo que viene; vale hasta el lunes a las 9:00. "
-               "Si hay que cambiar algo de las novedades, en store/whatsnew de main antes del lunes no llega: sale con lo de hoy.",
+               "Las novedades ya estan fijadas: aunque se toque store/whatsnew antes del lunes, salen las de arriba.",
                "actions": [{"action": "http", "label": "Parar esta semana", "url": f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}",
                             "method": "POST", "body": orden(p["clave"], p["version"]), "clear": True}]}
     else:
@@ -458,6 +460,20 @@ def prueba():
     assert bloqueo_ios([("2.6.0", "PREPARE_FOR_SUBMISSION", 67), ("2.4.0", "READY_FOR_SALE", 63)]) is None
     assert enviada_ios([("2.6.0", "PREPARE_FOR_SUBMISSION", 67), ("2.4.0", "READY_FOR_SALE", 63)]) == 63
     assert "Resolution Center" in bloqueo_ios([("1.2", "REJECTED", 20)])
+    # The Sunday notice: the button of a dry run never posts a real stop order; a real one posts tren-plan
+    import tempfile
+    global ntfy, publicar
+    enviado, guardados = [], (ntfy, publicar)
+    ntfy, publicar = enviado.append, enviado.append
+    t = {"falta": True, "sale": True, "subir": True, "bloqueo": None, "notas": {"carpeta": NOTAS, "generica": False, "base": None, "texto": "Nuevo"}}
+    for seco, cuerpo, n in ((True, "parar prueba chroma 1.3.0", 1), (False, "parar tren chroma 1.3.0", 2)):
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
+            json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": seco, "play": t, "ios": t}, f)
+        os.environ.update(PLAN_FILE=f.name, NTFY_TOPIC_APROBAR="T", PLAY_RESULT="success", IOS_RESULT="failure")
+        enviado.clear(); aviso()
+        assert enviado[0]["actions"][0]["body"] == cuerpo and len(enviado) == n and "iPhone: NO sale" in enviado[0]["message"]
+    ntfy, publicar = guardados
+    SECO = False
     print("prueba: todo bien")
 
 
