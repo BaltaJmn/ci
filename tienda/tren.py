@@ -14,8 +14,9 @@ app calls from its own tren.yml:
 
 Each scheduled step has a reserve run two or three hours later (PRIMERA): GitHub may drop a scheduled run,
 and what failed for a passing reason (an upload, an API, an unknown Play state) gets a second try there
-before it sounds. A reserve run after a good first one does nothing. Notices sound only when something
-is wrong and will not fix itself; what goes out fine arrives silent (ntfy priority 2).
+before it sounds. A reserve run after a good first one does nothing. Notices sound only for a rejection
+(Apple or Google) or a failure the reserve run did not fix; the rest arrives silent (ntfy priority 2):
+what goes out, and a store waiting for a review or a release, where there is nothing to do.
 
 Everything comes from the environment: APP (FlowTime), CLAVE (flowtime), PAQUETE, BUNDLE, VERSION_FILE,
 NTFY_TOPIC (notices), NTFY_TOPIC_APROBAR (secret topic: stop orders, the Play state the GK35 reads
@@ -216,6 +217,11 @@ def bloqueo_play(est, ahora, code=None):
     return f"{que[0]} ({texto or 'sin detalle'}). Que hacer: {que[1]}", False
 
 
+def grave(motivo):
+    """A block that sounds: a rejection, or Play state the GK35 cannot read. In review or pending, silent."""
+    return any(x in (motivo or "") for x in ("REJECTED", "INVALID_BINARY", "rechazad", DESCONOCIDO, "no se lee bien"))
+
+
 def ios_versiones(bundle):
     a = appstore.app_of(bundle)["id"]
     d = appstore.api("GET", f"/v1/apps/{a}/appStoreVersions?filter[platform]=IOS&include=build&fields[builds]=version&limit=10")
@@ -353,11 +359,12 @@ def aviso():
     fallidas = [k for k in ("play", "ios") if p[k]["subir"] and res[k] not in ("success", "")]
     for k in fallidas:  # a failed upload means that store does not go out on Monday
         p[k]["sale"] = False
-    # Sounds only for what is wrong and will not fix itself: a failed upload or an unknown Play state
-    # wait for the reserve run first
+    # Sounds for a failed upload or a grave block (rejection, Play unreadable), but in the first run a
+    # failed upload or an unreadable Play wait, silent, for the reserve run first
     mal = [k for k in ("play", "ios") if p[k]["falta"] and not p[k]["sale"]]
-    reintenta = bool(luego and mal and all(k in fallidas or (p[k]["bloqueo"] or "").startswith(DESCONOCIDO) for k in mal))
-    prioridad = 4 if mal and not reintenta else 2
+    pasajero = lambda k: k in fallidas or (p[k]["bloqueo"] or "").startswith(DESCONOCIDO)
+    reintenta = bool(luego and any(pasajero(k) for k in mal))
+    prioridad = 4 if any(not (luego and pasajero(k)) and (k in fallidas or grave(p[k]["bloqueo"])) for k in mal) else 2
     n = {k: p[k]["notas"] for k in ("play", "ios")}
     nota = lambda x: (f" genericas, porque nadie cambio store/whatsnew desde la {x['base'].lstrip('v')}" if x["generica"] else "") + ":\n" + x["texto"]
     novedades = (f"Novedades{nota(n['play'])}" if n["play"]["carpeta"] == n["ios"]["carpeta"]
@@ -376,7 +383,7 @@ def aviso():
     else:
         msg = {"title": f"{pre}{p['app']}: mañana no sale nada" + (" (de momento)" if reintenta else ""), "priority": prioridad,
                "message": "\n".join(lineas) + (
-                   f"\n\nPor que: algo pasajero, lo de arriba.\nQue hacer: nada por ahora. A las {luego} se reintenta sola; si sigue sin salir, llega otro aviso, con sonido."
+                   f"\n\nPor que: algo pasajero, lo de arriba.\nQue hacer: lo que dice cada tienda arriba. Lo pasajero se reintenta solo a las {luego}; si sigue sin salir, llega otro aviso, con sonido."
                    if reintenta else
                    "\n\nPor que: la subida del domingo fallo, y una tienda sin build del domingo no sale el lunes.\n"
                    "Que hacer: lo que dice cada tienda arriba. Relanzada antes del lunes a las 9:00, llega otro aviso y sale; si no, el domingo que viene va con lo que haya en main."
@@ -500,12 +507,13 @@ def lunes(repo):
 
 def avisar_lunes(res, prev, plan):
     """What is new for the Monday notice, and its priority. New: what changed since the 9:07 run (prev),
-    or everything but "ya" on the first one. It sounds for a failure, or for a store that does not go out
-    when Sunday's plan said it would (or there is no plan to know); a store Sunday already said would not
-    go out, what went out and what waits for the reserve run stay silent."""
+    or everything but "ya" on the first one. It sounds for a failure, or for a grave block (rejection,
+    Play unreadable) Sunday's plan did not know about (or there is no plan to know); a store in review
+    or pending, one Sunday already said would not go out, what went out and what waits for the reserve
+    run stay silent."""
     antes = prev or {}
     nuevo = {k: v for k, v in res.items() if antes.get(k) == "espera" or (v[0] != "ya" and antes.get(k) != v[0])}
-    fuerte = any(e == "fallo" or (e == "no" and (not plan or plan.get(k))) for k, (e, _) in nuevo.items())
+    fuerte = any(e == "fallo" or (e == "no" and grave(t) and (not plan or plan.get(k))) for k, (e, t) in nuevo.items())
     return nuevo, 4 if fuerte else 2
 
 
@@ -576,19 +584,28 @@ def prueba():
         json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": False, "reintento": "21:37",
                    "play": t, "ios": {**t, "sale": False, "subir": False, "bloqueo": "la 1.2 esta en WAITING_FOR_REVIEW."}}, g)
     enviado.clear(); aviso()
-    assert enviado[0]["priority"] == 4
+    assert enviado[0]["priority"] == 2 and '"reintento": true' in enviado[1]  # Play waits for 21:37; Apple in review: nothing to do
     os.environ.update(PLAY_RESULT="success")
     enviado.clear(); aviso()
-    assert enviado[0]["priority"] == 4 and enviado[0]["title"].startswith("Mañana sale")
+    assert enviado[0]["priority"] == 2 and enviado[0]["title"].startswith("Mañana sale")
+    with open(f.name, "w") as g:
+        json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": False, "reintento": "21:37",
+                   "play": t, "ios": {**t, "sale": False, "subir": False, "bloqueo": "la 1.2 esta en REJECTED."}}, g)
+    enviado.clear(); aviso()
+    assert enviado[0]["priority"] == 4  # a rejection sounds
     with open(f.name, "w") as g:
         json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": False, "play": t, "ios": t}, g)
     os.environ.update(IOS_RESULT="success")
     enviado.clear(); aviso()
     assert enviado[0]["priority"] == 2  # all goes out: silent
     # Monday: what sounds
-    sale, no, fallo_ = ("sale", "x"), ("no", "x"), ("fallo", "x")
+    sale, no, fallo_ = ("sale", "x"), ("no", "la 1.2 esta en REJECTED."), ("fallo", "x")
+    revision = ("no", "la 2.4.0 esta en WAITING_FOR_REVIEW.")
     assert avisar_lunes({"play": sale, "ios": no}, None, {"play": "sale", "ios": False}) == ({"play": sale, "ios": no}, 2)
     assert avisar_lunes({"play": sale, "ios": no}, None, None)[1] == 4  # no plan: cannot tell it is old news
+    assert avisar_lunes({"play": sale, "ios": revision}, None, None)[1] == 2  # in review: nothing to do, silent
+    assert avisar_lunes({"play": ("no", DESCONOCIDO + ": x"), "ios": revision}, None, {"play": "sale", "ios": False})[1] == 4
+    assert grave("tiene cambios rechazados (x)") and not grave("tiene cambios en revision (x)") and not grave("la 2.4.0 esta en PENDING_DEVELOPER_RELEASE.")
     assert avisar_lunes({"play": fallo_, "ios": ("ya", "x")}, None, {"play": "sale", "ios": False}) == ({"play": fallo_}, 4)
     assert avisar_lunes({"play": ("ya", "x"), "ios": sale}, {"play": "sale", "ios": "espera"}, None) == ({"ios": sale}, 2)
     assert avisar_lunes({"play": ("ya", "x"), "ios": no}, {"play": "sale", "ios": "no"}, None) == ({}, 2)  # reserve after a good 9:07

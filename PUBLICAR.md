@@ -269,12 +269,15 @@ versión nueva va a la rama `tren-seco` (se borra al acabar), Play solo valida l
 de iOS se exporta sin subir, nada cambia en App Store Connect, los avisos dicen PRUEBA y el botón
 publica `parar prueba ...`, que el tren de verdad no lee. Ni etiqueta ni mensajes para semana.
 
-**Avisos: suenan solo si algo va mal.** Lo que sale bien llega en silencio (ntfy prioridad 2) y
-queda en la tabla *Versiones*; el aviso del domingo con el botón también, si las dos tiendas salen:
-sin mirarlo, sale igual. Suena (prioridad 4), con por qué y qué hacer: una tienda que se salta la
-semana (revisión, rechazo, estado de Play desconocido), una subida que falló o un paso que se cortó.
-El lunes no vuelve a sonar por lo que el domingo ya dijo que no salía, y el de reserva no repite lo
-que dijo el de las 9:07.
+**Avisos: suenan solo los rechazos y los fallos** (decisión del usuario, 22-10-2026: "que nos
+enteremos si hay un error y listo"). Suena (prioridad 4), con por qué y qué hacer: un rechazo de Apple
+o de Google, un Play que el GK35 no consigue leer, una subida que falló o un paso que se cortó, en los
+dos últimos casos solo si la reserva tampoco lo arregla (`grave` de `tren.py`). Todo lo demás llega
+en silencio (ntfy prioridad 2) y queda en la tabla *Versiones*: lo que sale, y una tienda que se salta
+la semana porque la anterior sigue en revisión o pendiente de publicar, donde no hay nada que hacer.
+El aviso del domingo con el botón también es silencioso salvo un rechazo o un fallo: sin mirarlo,
+sale igual. El lunes no vuelve a sonar por lo que el domingo ya dijo que no salía, y el de reserva no
+repite lo que dijo el de las 9:07.
 
 **Reintentos antes de avisar.** `play.py` y `appstore.py` reintentan dos veces los 5xx (y Apple, el
 409 `STATE_ERROR`); la subida a TestFlight, dos veces sin recompilar; ntfy, dos veces. Lo que aun así
