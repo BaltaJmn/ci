@@ -33,8 +33,8 @@ LIBRE_IOS = {"READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_VERS
              "DEVELOPER_REMOVED_FROM_SALE", "PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED"}
 SIN_ENVIAR = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED"}  # prepared but never sent: reused
 QUE_HACER_IOS = {
-    "WAITING_FOR_REVIEW": "nada: cuando Apple la apruebe, el tren del lunes siguiente manda la nueva.",
-    "IN_REVIEW": "nada: cuando Apple la apruebe, el tren del lunes siguiente manda la nueva.",
+    "WAITING_FOR_REVIEW": "nada: el primer lunes con esa ya aprobada, el tren manda la nueva (este mismo, si Apple la aprueba antes de las 9:00).",
+    "IN_REVIEW": "nada: el primer lunes con esa ya aprobada, el tren manda la nueva (este mismo, si Apple la aprueba antes de las 9:00).",
     "PENDING_DEVELOPER_RELEASE": "publicala (App Store Connect > la app > la version > Publicar esta version); el lunes siguiente sale la nueva.",
     "REJECTED": "lee el motivo en App Store Connect > la app > Resolution Center, contesta o arregla y reenviala; mientras siga rechazada, el tren no envia otra.",
     "METADATA_REJECTED": "lee el motivo en App Store Connect > Resolution Center y corrige la ficha; mientras siga rechazada, el tren no envia otra.",
