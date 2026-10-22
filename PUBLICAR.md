@@ -181,6 +181,12 @@ Borrar esa captura fallida dio 500 la primera vez y funcionó al reintentar; sin
 deja crear otra (409). `appstore.py captura-compra ... --reemplazar` cambia la de una compra que aún
 no se ha enviado.
 
+**Un output con llaves no llega (22-10-2026).** El runner enmascara cada línea de un secreto de varias
+líneas, y la primera y la última del JSON de Play son `{` y `}`; también sus formas en base64. Un
+output de un trabajo que contenga una se descarta con "Skip output ... since it may contain secret" y
+el siguiente lo recibe vacío. En `tren.yml` el plan va como artefacto y los outputs son solo
+palabras cortas. De paso, en los registros de esos trabajos las llaves salen como `***`.
+
 ## 6. Estado de cada app (06-10-2026)
 
 | App | Google Play | App Store |
