@@ -226,6 +226,10 @@ nuevo; si lo hay, sale la siguiente minor.
   la `alpha` del propio tren, se promociona igual (cancela esa revisión y la reenvía con producción);
   en cualquier otro caso, `ERROR_IF_IN_REVIEW` es la red: Play no pisa nada aunque la lectura falle.
 
+**Cambios de ficha en Play** (temporadas, experimentos): de martes a jueves. Una ficha en revisión el
+domingo deja a Play fuera del tren esa semana, y el lunes, con la versión del tren en revisión, la
+subida de la ficha falla con `CHANGES_ALREADY_IN_REVIEW` hasta que Google la apruebe.
+
 **Números.** El mismo `versionName` y `versionCode` en las dos tiendas (el fichero de versión de
 Android). Cada tren sube la minor (`2.5.0` a `2.6.0`) y el `versionCode` desde el que haya en main:
 entre semana el `versionCode` solo sube para una build de prueba de TestFlight sin etiqueta
