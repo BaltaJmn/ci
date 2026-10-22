@@ -18,7 +18,7 @@ from Play Console and the train's own messages for semana.baltajmn.dev), SECO=tr
 the credentials play.py and appstore.py read. Dry: nothing is pushed to main, no tag, Play only
 validates, nothing changes in App Store Connect, notices say PRUEBA and stop orders say "parar prueba".
 """
-import datetime, json, os, pathlib, re, subprocess, sys, urllib.parse, urllib.request
+import base64, datetime, json, os, pathlib, re, subprocess, sys, urllib.parse, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import appstore, play  # noqa: E402
@@ -219,9 +219,11 @@ def alpha_play(pistas):
 
 
 def salida(**kv):
+    """Job outputs. The plan goes in base64: GitHub masks every line of a multi-line secret, also the "{"
+    and "}" of the Play JSON, and drops any output that contains one."""
     with open(os.environ.get("GITHUB_OUTPUT", os.devnull), "a") as f:
         for k, v in kv.items():
-            f.write(f"{k}={json.dumps(v) if isinstance(v, (dict, list)) else str(v).lower() if isinstance(v, bool) else v}\n")
+            f.write(f"{k}={base64.b64encode(json.dumps(v).encode()).decode() if isinstance(v, (dict, list)) else str(v).lower() if isinstance(v, bool) else v}\n")
 
 
 # ---------- Sunday ----------
@@ -290,7 +292,7 @@ def linea(tienda, t, resultado, code):
 
 
 def aviso():
-    p = json.loads(env("PLAN"))
+    p = json.loads(base64.b64decode(env("PLAN")))
     res = {"play": os.environ.get("PLAY_RESULT", ""), "ios": os.environ.get("IOS_RESULT", "")}
     lineas = [linea("Google Play", p["play"], res["play"], p["code"]), linea("iPhone", p["ios"], res["ios"], p["code"])]
     for k in ("play", "ios"):  # a failed upload means that store does not go out on Monday
