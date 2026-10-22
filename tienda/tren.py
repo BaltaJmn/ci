@@ -355,8 +355,10 @@ def lunes(repo):
     git(repo, "checkout", "-q", tag)  # listing, screenshots and notes as they were built, not today's main
     msgs, ahora = leer_topic(), datetime.datetime.now(datetime.timezone.utc).timestamp()
     pre = "PRUEBA, no ha salido nada de verdad. " if SECO else ""
-    if parada(msgs, clave, nombre):
-        ntfy({"title": f"{pre}{app} {nombre} parada esta semana", "priority": 3, "click": ejecucion(),
+    # Dry, the stop order to look for is the one of the dry Sunday notice: the version it would have made
+    anunciada = subir_minor((pathlib.Path(repo) / env("VERSION_FILE")).read_text(encoding="utf-8"))[1] if SECO else nombre
+    if parada(msgs, clave, anunciada):
+        ntfy({"title": f"{pre}{app} {anunciada} parada esta semana", "priority": 3, "click": ejecucion(),
               "message": "No sale en ninguna tienda.\n\nPor que: pulsaste 'Parar esta semana' en el aviso del domingo.\n"
                          "Que hacer: nada. El domingo que viene vuelve a salir, con lo que haya en main para entonces."})
         if not SECO:
