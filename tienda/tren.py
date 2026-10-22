@@ -12,13 +12,18 @@ app calls from its own tren.yml:
     tren.py fallo <paso>     notice when a step broke before its own notice
     tren.py --prueba         checks without network
 
+Each scheduled step has a reserve run two or three hours later (PRIMERA): GitHub may drop a scheduled run,
+and what failed for a passing reason (an upload, an API, an unknown Play state) gets a second try there
+before it sounds. A reserve run after a good first one does nothing. Notices sound only when something
+is wrong and will not fix itself; what goes out fine arrives silent (ntfy priority 2).
+
 Everything comes from the environment: APP (FlowTime), CLAVE (flowtime), PAQUETE, BUNDLE, VERSION_FILE,
 NTFY_TOPIC (notices), NTFY_TOPIC_APROBAR (secret topic: stop orders, the Play state the GK35 reads
 from Play Console and the train's own messages for semana.baltajmn.dev), SECO=true for a dry run, and
 the credentials play.py and appstore.py read. Dry: nothing is pushed to main, no tag, Play only
 validates, nothing changes in App Store Connect, notices say PRUEBA and stop orders say "parar prueba".
 """
-import datetime, json, os, pathlib, re, subprocess, sys, urllib.parse, urllib.request
+import datetime, json, os, pathlib, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import appstore, play  # noqa: E402
@@ -27,6 +32,9 @@ NOTAS, GENERICAS = "store/whatsnew", "store/whatsnew-generic"
 # A week with only these changes makes no version: documentation, workflows and IDE files.
 FUERA = [":(exclude)*.md", ":(exclude).github", ":(exclude).idea"]
 FRESCO = 3 * 3600  # the GK35 reads Play Console 20 minutes before each train; older than 3 h, unknown
+DESCONOCIDO = "no se en que estado esta Play"
+# The first scheduled run of each step (cron of the app's tren.yml) and the time of its reserve run.
+PRIMERA = {"37 19 * * 0": "21:37", "17 1 * * 1": "4:17", "7 9 * * 1": "11:07"}
 # App Store states that leave the way free. Anything else on any version blocks (in review, pending
 # release, rejected, processing...): the train never piles a version on top of another.
 LIBRE_IOS = {"READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_VERSION", "REMOVED_FROM_SALE",
@@ -64,11 +72,13 @@ def version(texto):
     return f"{n[2]}.{n[3]}.{n[4] or 0}", int(c[2])
 
 
-def subir_minor(texto):
-    """Every train: minor + 1 and patch 0 (the patch is for urgent fixes, by hand); versionCode + 1."""
-    _, code = version(texto)
+def subir_minor(texto, usado=0):
+    """Every train: minor + 1 and patch 0 (the patch is for urgent fixes, by hand). versionCode: the highest
+    one used anywhere (the file, Play, App Store Connect with TestFlight) + 1, so a TestFlight test build
+    needs no bookkeeping."""
+    code = max(version(texto)[1], usado) + 1
     texto = NOMBRE.sub(lambda m: f"{m[1]}{m[2]}.{int(m[3]) + 1}.0{m[5]}", texto, count=1)
-    texto = CODIGO.sub(lambda m: f"{m[1]}{code + 1}", texto, count=1)
+    texto = CODIGO.sub(lambda m: f"{m[1]}{code}", texto, count=1)
     return (texto, *version(texto))
 
 
@@ -116,23 +126,52 @@ def notas_para(repo, desde_code, hasta):
 
 
 # ---------- ntfy ----------
+def _ntfy(req):
+    for intento in range(3):  # ntfy.sh fails now and then: two retries
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return r.read()
+        except (urllib.error.URLError, TimeoutError) as e:
+            if intento == 2 or (isinstance(e, urllib.error.HTTPError) and e.code < 500):
+                raise
+            time.sleep(10 * (intento + 1))
+
+
 def ntfy(msg):
-    body = json.dumps({"topic": env("NTFY_TOPIC"), **msg}).encode()
-    with urllib.request.urlopen(urllib.request.Request("https://ntfy.sh/", body, method="POST"), timeout=30) as r:
-        r.read()
+    _ntfy(urllib.request.Request("https://ntfy.sh/", json.dumps({"topic": env("NTFY_TOPIC"), **msg}).encode(), method="POST"))
 
 
 def publicar(texto):
     """A line on the secret topic (stop orders, the train's own messages)."""
-    with urllib.request.urlopen(urllib.request.Request(f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}",
-                                                       texto.encode(), method="POST"), timeout=30) as r:
-        r.read()
+    _ntfy(urllib.request.Request(f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}", texto.encode(), method="POST"))
 
 
 def leer_topic():
-    url = f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}/json?poll=1&since=12h"
-    with urllib.request.urlopen(url, timeout=30) as r:
-        return [m for m in map(json.loads, r.read().decode().splitlines()) if m.get("event") == "message"]
+    out = _ntfy(urllib.request.Request(f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}/json?poll=1&since=12h"))
+    return [m for m in map(json.loads, out.decode().splitlines()) if m.get("event") == "message"]
+
+
+def del_tren(msgs, tipo, clave, nombre=None):
+    """The newest "tren-<tipo> <clave> <json>" on the topic (of that version, if given), or None."""
+    for m in sorted(msgs, key=lambda m: m.get("time", 0), reverse=True):
+        t = (m.get("message") or "").strip()
+        if t.startswith(f"tren-{tipo} {clave} "):
+            try:
+                d = json.loads(t.split(" ", 2)[2])
+            except ValueError:
+                continue
+            if nombre is None or d.get("version") == nombre:
+                return d
+    return None
+
+
+def reserva():
+    """The reserve run's time when this is the first scheduled run of its step, else None."""
+    try:
+        with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
+            return PRIMERA.get(json.load(f).get("schedule"))
+    except (KeyError, OSError, ValueError):
+        return None
 
 
 def ejecucion():
@@ -151,14 +190,7 @@ def parada(msgs, clave, nombre):
 
 def estado_play(msgs, paquete):
     """The newest "tren-play <package> <json>" the GK35 posted (navegador.mjs on Publishing overview)."""
-    for m in sorted(msgs, key=lambda m: m.get("time", 0), reverse=True):
-        t = (m.get("message") or "").strip()
-        if t.startswith(f"tren-play {paquete} "):
-            try:
-                return json.loads(t.split(" ", 2)[2])
-            except ValueError:
-                return None
-    return None
+    return del_tren(msgs, "play", paquete)
 
 
 def bloqueo_play(est, ahora, code=None):
@@ -166,10 +198,10 @@ def bloqueo_play(est, ahora, code=None):
     Monday morning; if it is the only thing in review, promoting cancels and resends it with production."""
     que_hacer_gk = "en el GK35, node ~/AndroidStudioProjects/TikTok/versiones.mjs play (si dice 'Sin sesion', login de play por noVNC)."
     if not est:
-        return f"no se en que estado esta Play: el GK35 no lo ha publicado en las ultimas 12 h. Que hacer: {que_hacer_gk}", False
+        return f"{DESCONOCIDO}: el GK35 no lo ha publicado en las ultimas 12 h. Que hacer: {que_hacer_gk}", False
     leido = datetime.datetime.fromisoformat(est["leido"].replace("Z", "+00:00")).timestamp()
     if ahora - leido > FRESCO:
-        return f"no se en que estado esta Play: lo ultimo que leyo el GK35 es de hace {int((ahora - leido) / 3600)} h. Que hacer: {que_hacer_gk}", False
+        return f"{DESCONOCIDO}: lo ultimo que leyo el GK35 es de hace {int((ahora - leido) / 3600)} h. Que hacer: {que_hacer_gk}", False
     filas = est.get("items") or []
     texto = "; ".join(" ".join(f) for f in filas) or est.get("detalle", "")
     if est.get("estado") == "libre":
@@ -204,6 +236,13 @@ def enviada_ios(vers):
     return max([b for _, e, b in vers if e not in SIN_ENVIAR] or [0])
 
 
+def ios_max_build(bundle):
+    """The highest build number App Store Connect has, TestFlight test builds included."""
+    a = appstore.app_of(bundle)["id"]
+    return max([int(v) for b in appstore.get_all(f"/v1/builds?filter[app]={a}&fields[builds]=version&limit=200")
+                if (v := b["attributes"]["version"]).isdigit()] or [0])
+
+
 def ios_builds(bundle, nombre):
     a = appstore.app_of(bundle)["id"]
     return {int(b["attributes"]["version"]): b["attributes"]["processingState"] for b in appstore.get_all(
@@ -232,13 +271,19 @@ def domingo(repo):
     app, clave, paquete, bundle, vf = env("APP"), env("CLAVE"), env("PAQUETE"), env("BUNDLE"), env("VERSION_FILE")
     texto = (pathlib.Path(repo) / vf).read_text(encoding="utf-8")
     ultima = ultima_etiqueta(repo)
-    cambios = git(repo, "diff", "--name-only", ultima, "HEAD", "--", ".", *FUERA).split()
     msgs, ahora = leer_topic(), datetime.datetime.now(datetime.timezone.utc).timestamp()
     pistas, vers = play.tracks(paquete), ios_versiones(bundle)
     prod_play, alpha, env_ios = produccion_play(pistas), alpha_play(pistas), enviada_ios(vers)
+    # The reserve run of a Sunday whose first run already made the version: the same one, only what is
+    # missing (an upload that failed, Play now readable), never a second version
+    hecha = (not SECO and os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+             and ahora - int(git(repo, "log", "-1", "--format=%ct", ultima)) < 6 * 3600)
+    hasta, base = (ultima, git(repo, "describe", "--tags", "--abbrev=0", "--match", "v*", f"{ultima}^", check=False) or ultima) if hecha else ("HEAD", ultima)
+    cambios = git(repo, "diff", "--name-only", base, hasta, "--", ".", *FUERA).split()
     nuevo = None
-    if cambios or SECO:  # dry runs always build, to test the whole way
-        nuevo, nombre, code = subir_minor(texto)
+    if (cambios and not hecha) or SECO:  # dry runs always build, to test the whole way
+        usado = max([play.usados(paquete), ios_max_build(bundle)] + [int(c) for rs in pistas.values() for r in rs for c in r.get("versionCodes", [])])
+        nuevo, nombre, code = subir_minor(texto, usado)
     else:
         nombre, code = version_en(repo, ultima)
     b_play, _ = bloqueo_play(estado_play(msgs, paquete), ahora, code)
@@ -250,13 +295,13 @@ def domingo(repo):
     tf = {} if nuevo else ios_builds(bundle, nombre)
     plan = {
         "app": app, "clave": clave, "version": nombre, "code": code, "nueva": bool(nuevo), "cambios": len(cambios),
-        "ultima": ultima, "seco": SECO,
+        "ultima": base, "seco": SECO, "reintento": reserva(),
         "play": {"falta": falta_play, "sale": sale_play, "bloqueo": b_play, "produccion": prod_play,
                  "subir": SECO or (sale_play and code not in alpha),
-                 "notas": notas_para(repo, prod_play, "HEAD")},
+                 "notas": notas_para(repo, prod_play, hasta)},
         "ios": {"falta": falta_ios, "sale": sale_ios, "bloqueo": b_ios, "enviada": env_ios,
                 "subir": SECO or (falta_ios and code not in tf and (sale_play or sale_ios)),
-                "notas": notas_para(repo, env_ios, "HEAD")},
+                "notas": notas_para(repo, env_ios, hasta)},
     }
     ref = ultima
     if nuevo:
@@ -278,18 +323,23 @@ def domingo(repo):
                 git(repo, *quien, "pull", "-q", "--rebase", "origin", "main")
     print(json.dumps(plan, ensure_ascii=False, indent=1))
     hay = plan["play"]["sale"] or plan["ios"]["sale"]
+    subir = plan["play"]["subir"] or plan["ios"]["subir"]
+    # Announced already (the reserve run): again only if it uploads something or the first one said it would retry
+    ya = None if SECO else del_tren(msgs, "plan", clave, nombre)
     pathlib.Path(env("PLAN_FILE", os.devnull)).write_text(json.dumps(plan), encoding="utf-8")
     salida(ref=ref, play=plan["play"]["subir"], ios=plan["ios"]["subir"], **{"notas-play": plan["play"]["notas"]["carpeta"]},
-           aviso=SECO or bool(cambios) or hay)
+           aviso=SECO or subir or (not ya and (bool(cambios) or hay)) or bool(ya and ya.get("reintento")))
 
 
-def linea(tienda, t, resultado, code):
+def linea(tienda, t, resultado, code, luego=None):
     if not t["falta"]:
         return f"{tienda}: ya tiene la {code}."
     if t["subir"] and resultado not in ("success", ""):
+        if luego:
+            return f"{tienda}: NO sale todavia, la subida del domingo fallo ({resultado}). Que hacer: nada, se reintenta sola a las {luego}."
         return f"{tienda}: NO sale, la subida del domingo fallo ({resultado}). Que hacer: abre la ejecucion (tocar el aviso), mira el paso en rojo y relanzala con 'Re-run failed jobs' antes del lunes a las 9:00."
     if not t["sale"]:
-        return f"{tienda}: NO sale, {t['bloqueo']}"
+        return f"{tienda}: NO sale, {t['bloqueo']}" + (f" Se vuelve a mirar sola a las {luego}." if luego and t["bloqueo"].startswith(DESCONOCIDO) else "")
     return f"{tienda}: sale" + (" (subida hoy)" if t["subir"] else " (ya estaba subida)")
 
 
@@ -297,11 +347,17 @@ def aviso():
     global SECO
     p = json.loads(pathlib.Path(env("PLAN_FILE")).read_text(encoding="utf-8"))
     SECO = p["seco"]  # the stop button of a dry notice says "parar prueba"
+    luego = p.get("reintento")  # the reserve run's time, when this is the first run of the Sunday
     res = {"play": os.environ.get("PLAY_RESULT", ""), "ios": os.environ.get("IOS_RESULT", "")}
-    lineas = [linea("Google Play", p["play"], res["play"], p["code"]), linea("iPhone", p["ios"], res["ios"], p["code"])]
+    lineas = [linea("Google Play", p["play"], res["play"], p["code"], luego), linea("iPhone", p["ios"], res["ios"], p["code"], luego)]
     fallidas = [k for k in ("play", "ios") if p[k]["subir"] and res[k] not in ("success", "")]
     for k in fallidas:  # a failed upload means that store does not go out on Monday
         p[k]["sale"] = False
+    # Sounds only for what is wrong and will not fix itself: a failed upload or an unknown Play state
+    # wait for the reserve run first
+    mal = [k for k in ("play", "ios") if p[k]["falta"] and not p[k]["sale"]]
+    reintenta = bool(luego and mal and all(k in fallidas or (p[k]["bloqueo"] or "").startswith(DESCONOCIDO) for k in mal))
+    prioridad = 4 if mal and not reintenta else 2
     n = {k: p[k]["notas"] for k in ("play", "ios")}
     nota = lambda x: (f" genericas, porque nadie cambio store/whatsnew desde la {x['base'].lstrip('v')}" if x["generica"] else "") + ":\n" + x["texto"]
     novedades = (f"Novedades{nota(n['play'])}" if n["play"]["carpeta"] == n["ios"]["carpeta"]
@@ -309,7 +365,7 @@ def aviso():
     pre = "PRUEBA, no sale nada de verdad. " if p["seco"] else ""
     if p["play"]["sale"] or p["ios"]["sale"]:
         que = [x for x, k in (("en Google Play, a produccion al 100 %", "play"), ("en iPhone, a revision de Apple, que la publica sola al aprobarla", "ios")) if p[k]["sale"]]
-        msg = {"title": f"{pre}Mañana sale {p['app']} {p['version']}", "priority": 4,
+        msg = {"title": f"{pre}Mañana sale {p['app']} {p['version']}", "priority": prioridad,
                "message": f"{novedades}\n\n" + "\n".join(lineas) + "\n\n"
                f"Por que: es el tren semanal. El domingo se prepara lo que hay en main ({p['cambios']} ficheros cambiados desde la {p['ultima'].lstrip('v')}) "
                f"y el lunes a las 9:00 sale {' y '.join(que)}.\n"
@@ -318,27 +374,34 @@ def aviso():
                "actions": [{"action": "http", "label": "Parar esta semana", "url": f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}",
                             "method": "POST", "body": orden(p["clave"], p["version"]), "clear": True}]}
     else:
-        msg = {"title": f"{pre}{p['app']}: mañana no sale nada", "priority": 4,
-               "message": "\n".join(lineas) + ("\n\nPor que: la subida del domingo fallo, y una tienda sin build del domingo no sale el lunes.\n"
-               "Que hacer: lo que dice cada tienda arriba. Relanzada antes del lunes a las 9:00, llega otro aviso y sale; si no, el domingo que viene va con lo que haya en main."
-               if fallidas else "\n\nPor que: el tren semanal no pone una version encima de otra que aun esta en revision, rechazada o sin publicar, y sin tienda libre no gasta numero.\n"
-               "Que hacer: lo que dice cada tienda arriba. El domingo que viene se vuelve a intentar con lo que haya en main.")}
+        msg = {"title": f"{pre}{p['app']}: mañana no sale nada" + (" (de momento)" if reintenta else ""), "priority": prioridad,
+               "message": "\n".join(lineas) + (
+                   f"\n\nPor que: algo pasajero, lo de arriba.\nQue hacer: nada por ahora. A las {luego} se reintenta sola; si sigue sin salir, llega otro aviso, con sonido."
+                   if reintenta else
+                   "\n\nPor que: la subida del domingo fallo, y una tienda sin build del domingo no sale el lunes.\n"
+                   "Que hacer: lo que dice cada tienda arriba. Relanzada antes del lunes a las 9:00, llega otro aviso y sale; si no, el domingo que viene va con lo que haya en main."
+                   if fallidas else
+                   "\n\nPor que: el tren semanal no pone una version encima de otra que aun esta en revision, rechazada o sin publicar, y sin tienda libre no gasta numero.\n"
+                   "Que hacer: lo que dice cada tienda arriba. El domingo que viene se vuelve a intentar con lo que haya en main.")}
     msg["click"] = ejecucion()
     ntfy(msg)
     if not p["seco"]:
         publicar(f"tren-plan {p['clave']} " + json.dumps({"version": p["version"], "code": p["code"], "el": int(datetime.datetime.now().timestamp()),
                                                           "play": p["play"]["sale"] and (p["play"]["bloqueo"] or "sale"), "ios": p["ios"]["sale"] and (p["ios"]["bloqueo"] or "sale"),
-                                                          "motivos": lineas}, ensure_ascii=False))
+                                                          "reintento": reintenta, "motivos": lineas}, ensure_ascii=False))
     print(msg["title"], "\n", msg["message"])
 
 
-# ---------- night ----------
 def eco():
     msgs, clave = leer_topic(), env("CLAVE")
     vistas = {(m.get("message") or "").strip() for m in msgs}
     for o in sorted(o for o in vistas if re.fullmatch(rf"parar {'prueba' if SECO else 'tren'} {re.escape(clave)} [\d.]+", o)):
         publicar(o)
         print("eco:", o)
+    plan = None if SECO else del_tren(msgs, "plan", clave)
+    if plan:  # Monday reads it to know what Sunday already said (no second sound for the same thing)
+        publicar(f"tren-plan {clave} " + json.dumps(plan, ensure_ascii=False))
+        print("eco: tren-plan", plan["version"])
 
 
 # ---------- Monday ----------
@@ -364,10 +427,14 @@ def lunes(repo):
     git(repo, "checkout", "-q", tag)  # listing, screenshots and notes as they were built, not today's main
     msgs, ahora = leer_topic(), datetime.datetime.now(datetime.timezone.utc).timestamp()
     pre = "PRUEBA, no ha salido nada de verdad. " if SECO else ""
+    luego = reserva()  # passing troubles wait for the reserve run before they sound
+    prev = None if SECO else del_tren(msgs, "lunes", clave, nombre)  # the 9:07 run, seen from the reserve one
     # Dry, the stop order to look for is the one of the dry Sunday notice: the version it would have made
     anunciada = subir_minor((pathlib.Path(repo) / env("VERSION_FILE")).read_text(encoding="utf-8"))[1] if SECO else nombre
     if parada(msgs, clave, anunciada):
-        ntfy({"title": f"{pre}{app} {anunciada} parada esta semana", "priority": 3, "click": ejecucion(),
+        if prev and prev.get("play") == "parada":
+            return
+        ntfy({"title": f"{pre}{app} {anunciada} parada esta semana", "priority": 2, "click": ejecucion(),
               "message": "No sale en ninguna tienda.\n\nPor que: pulsaste 'Parar esta semana' en el aviso del domingo.\n"
                          "Que hacer: nada. El domingo que viene vuelve a salir, con lo que haya en main para entonces."})
         if not SECO:
@@ -391,8 +458,8 @@ def lunes(repo):
                                + (f". En seco, validado con la {code if code in alpha else max(alpha)}" + (f"; de verdad se saltaria: {b}" if b else "") if SECO else ""))
     except SystemExit as e:
         m = str(e.code)
-        res["play"] = ("fallo", "Google tiene cambios en revision y no los piso. Que hacer: nada, el lunes siguiente." if "CHANGES_ALREADY_IN_REVIEW" in m
-                       else f"{m[:300]}. Que hacer: mira la ejecucion (tocar el aviso); arreglado, gh workflow run tren.yml -R {os.environ.get('GITHUB_REPOSITORY')} -f paso=lunes -f seco=false")
+        res["play"] = (("no", "Google tiene cambios en revision y no los piso. Que hacer: nada, el lunes siguiente.") if "CHANGES_ALREADY_IN_REVIEW" in m
+                       else ("fallo", f"{m[:300]}. Que hacer: mira la ejecucion (tocar el aviso); arreglado, gh workflow run tren.yml -R {os.environ.get('GITHUB_REPOSITORY')} -f paso=lunes -f seco=false"))
     try:
         vers = ios_versiones(bundle)
         enviada, b = enviada_ios(vers), bloqueo_ios(vers)
@@ -412,25 +479,43 @@ def lunes(repo):
                 res["ios"] = ("sale", "enviada a revision; Apple suele tardar 1 o 2 dias y la publica sola al aprobarla")
     except SystemExit as e:
         res["ios"] = ("fallo", f"{str(e.code)[:300]}. Que hacer: mira la ejecucion (tocar el aviso) y App Store Connect; arreglado, gh workflow run tren.yml -R {os.environ.get('GITHUB_REPOSITORY')} -f paso=lunes -f seco=false")
+    if luego:
+        for k, (e, t) in list(res.items()):
+            if e == "fallo" or (e == "no" and t.startswith(DESCONOCIDO)):
+                res[k] = ("espera", f"{t} Se reintenta sola a las {luego}.")
     lineas = [f"{t}: {res[k][1]}" for t, k in (("Google Play", "play"), ("iPhone", "ios"))]
     print("\n".join(lineas))
     if not SECO:
         publicar(f"tren-lunes {clave} " + json.dumps({"version": nombre, "code": code, "el": int(ahora), **{k: v[0] for k, v in res.items()}}))
-    if all(v[0] == "ya" for v in res.values()) and not SECO:
-        return  # nothing new this week (no train on Sunday): no notice
+    nuevo, prioridad = avisar_lunes(res, prev, None if SECO else del_tren(msgs, "plan", clave, nombre))
+    if not nuevo and not SECO:
+        return  # nothing new: no train on Sunday, or the reserve run after a good 9:07 one
     salio = [t for t, k in (("Google Play", "play"), ("iPhone", "ios")) if res[k][0] == "sale"]
     mal = any(v[0] in ("no", "fallo") for v in res.values())
     ntfy({"title": f"{pre}{app} {nombre}: " + (f"sale en {' y '.join(salio)}" if salio else "no ha salido"),
-          "priority": 4 if mal else 3, "click": ejecucion(),
+          "priority": prioridad, "click": ejecucion(),
           "message": "\n".join(lineas) + "\n\nPor que: es el tren de los lunes; una tienda con la version anterior en revision, rechazada o sin publicar se salta la semana.\n"
                      + ("Que hacer: lo que dice cada tienda arriba." if mal else "Que hacer: nada.")})
 
 
+def avisar_lunes(res, prev, plan):
+    """What is new for the Monday notice, and its priority. New: what changed since the 9:07 run (prev),
+    or everything but "ya" on the first one. It sounds for a failure, or for a store that does not go out
+    when Sunday's plan said it would (or there is no plan to know); a store Sunday already said would not
+    go out, what went out and what waits for the reserve run stay silent."""
+    antes = prev or {}
+    nuevo = {k: v for k, v in res.items() if antes.get(k) == "espera" or (v[0] != "ya" and antes.get(k) != v[0])}
+    fuerte = any(e == "fallo" or (e == "no" and (not plan or plan.get(k))) for k, (e, _) in nuevo.items())
+    return nuevo, 4 if fuerte else 2
+
+
 def fallo(paso):
-    ntfy({"title": f"El tren de {env('APP')} fallo ({paso})", "priority": 4, "click": ejecucion(),
+    luego = reserva()
+    ntfy({"title": f"El tren de {env('APP')} fallo ({paso})", "priority": 2 if luego else 4, "click": ejecucion(),
           "message": f"La ejecucion del {paso} se corto antes de acabar.\n\nPor que: un error de la API de una tienda, de ntfy o de git; "
                      "el detalle esta en el paso en rojo (tocar este aviso).\n"
-                     f"Que hacer: pasale este aviso a Claude, o relanzala cuando se arregle: gh workflow run tren.yml -R {os.environ.get('GITHUB_REPOSITORY')} -f paso={paso} -f seco=false"})
+                     + (f"Que hacer: nada por ahora. A las {luego} se reintenta sola; si vuelve a fallar, llega otro aviso, con sonido." if luego else
+                        f"Que hacer: pasale este aviso a Claude, o relanzala cuando se arregle: gh workflow run tren.yml -R {os.environ.get('GITHUB_REPOSITORY')} -f paso={paso} -f seco=false")})
 
 
 # ---------- self-check ----------
@@ -439,6 +524,7 @@ def prueba():
     assert version(t) == ("1.2.4", 24) and subir_minor(t)[1:] == ("1.3.0", 25)
     assert subir_minor('const val versionCode = 66\nconst val versionName = "2.5.0"')[1:] == ("2.6.0", 67)
     assert subir_minor('versionCode = 9\nversionName = "1.8"')[1:] == ("1.9.0", 10)
+    assert subir_minor(t, 30)[2] == 31 and subir_minor(t, 3)[2] == 25  # the highest used anywhere + 1
     global SECO
     msgs = [{"message": "parar tren flowtime 2.6.0"}, {"message": "aprobar 2026-10-26 x todo"}]
     assert parada(msgs, "flowtime", "2.6.0") and not parada(msgs, "flowtime", "2.7.0") and not parada(msgs, "chroma", "2.6.0")
@@ -479,6 +565,36 @@ def prueba():
     os.environ["PLAY_RESULT"] = "failure"  # nothing goes out because an upload failed: say relaunch, not "next Sunday"
     enviado.clear(); aviso()
     assert "no sale nada" in enviado[0]["title"] and "Relanzada" in enviado[0]["message"] and "sin tienda libre" not in enviado[0]["message"]
+    assert enviado[0]["priority"] == 4 and '"reintento": false' in enviado[1]
+    # The first run of the Sunday: a failed upload waits, silent, for the reserve run; a store in review sounds
+    with open(f.name, "w") as g:
+        json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": False,
+                   "reintento": "21:37", "play": t, "ios": t}, g)
+    enviado.clear(); aviso()
+    assert enviado[0]["priority"] == 2 and "21:37" in enviado[0]["message"] and '"reintento": true' in enviado[1]
+    with open(f.name, "w") as g:
+        json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": False, "reintento": "21:37",
+                   "play": t, "ios": {**t, "sale": False, "subir": False, "bloqueo": "la 1.2 esta en WAITING_FOR_REVIEW."}}, g)
+    enviado.clear(); aviso()
+    assert enviado[0]["priority"] == 4
+    os.environ.update(PLAY_RESULT="success")
+    enviado.clear(); aviso()
+    assert enviado[0]["priority"] == 4 and enviado[0]["title"].startswith("Mañana sale")
+    with open(f.name, "w") as g:
+        json.dump({"app": "Chroma", "clave": "chroma", "version": "1.3.0", "code": 26, "cambios": 3, "ultima": "v1.2.4", "seco": False, "play": t, "ios": t}, g)
+    os.environ.update(IOS_RESULT="success")
+    enviado.clear(); aviso()
+    assert enviado[0]["priority"] == 2  # all goes out: silent
+    # Monday: what sounds
+    sale, no, fallo_ = ("sale", "x"), ("no", "x"), ("fallo", "x")
+    assert avisar_lunes({"play": sale, "ios": no}, None, {"play": "sale", "ios": False}) == ({"play": sale, "ios": no}, 2)
+    assert avisar_lunes({"play": sale, "ios": no}, None, None)[1] == 4  # no plan: cannot tell it is old news
+    assert avisar_lunes({"play": fallo_, "ios": ("ya", "x")}, None, {"play": "sale", "ios": False}) == ({"play": fallo_}, 4)
+    assert avisar_lunes({"play": ("ya", "x"), "ios": sale}, {"play": "sale", "ios": "espera"}, None) == ({"ios": sale}, 2)
+    assert avisar_lunes({"play": ("ya", "x"), "ios": no}, {"play": "sale", "ios": "no"}, None) == ({}, 2)  # reserve after a good 9:07
+    assert avisar_lunes({"play": ("ya", "x"), "ios": ("ya", "x")}, None, None) == ({}, 2)
+    assert del_tren([{"time": 1, "message": 'tren-plan chroma {"version": "1.3.0", "reintento": true}'},
+                     {"time": 2, "message": 'tren-plan chroma {"version": "1.4.0"}'}], "plan", "chroma", "1.3.0")["reintento"]
     ntfy, publicar = guardados
     SECO = False
     print("prueba: todo bien")

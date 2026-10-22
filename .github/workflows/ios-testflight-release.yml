@@ -159,11 +159,19 @@ jobs:
           </plist>
           PLIST
 
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/app.xcarchive" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
-            "${AUTH[@]}"
+          # The upload to App Store Connect fails now and then for a passing reason: two retries, the
+          # archive is not rebuilt.
+          for intento in 1 2 3; do
+            rm -rf "$RUNNER_TEMP/export"
+            xcodebuild -exportArchive \
+              -archivePath "$RUNNER_TEMP/app.xcarchive" \
+              -exportPath "$RUNNER_TEMP/export" \
+              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+              "${AUTH[@]}" && break
+            [ "$intento" = 3 ] && exit 1
+            echo "::warning::La subida fallo (intento $intento); reintento en $((intento * 60)) s"
+            sleep $((intento * 60))
+          done
 
       - name: Shred the keys
         if: always()

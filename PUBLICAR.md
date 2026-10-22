@@ -215,8 +215,10 @@ la hora en punto GitHub retrasa, y puede tirar, las ejecuciones programadas.
 | Cuándo | Qué hace |
 |---|---|
 | Domingo 19:37 | Si hay cambios en main desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`), sube la minor y el `versionCode`, deja el commit `tren: <App> X.Y.0 (N)` y la etiqueta `vX.Y.0`, y llama a `android-play-release.yml` (canal `alpha`) y a `ios-testflight-release.yml` con `ref` de esa etiqueta: lo que empuja `GITHUB_TOKEN` no dispara otros workflows. Al acabar, ntfy "Mañana sale <App> X.Y.0" con las novedades, qué tienda sale y cuál no y por qué, y el botón "Parar esta semana" |
-| Lunes 1:17 | Eco: vuelve a publicar las órdenes de parar. ntfy.sh guarda 12 h, y una pulsada el domingo a las 20:00 ya no estaría a las 9:00 |
+| Domingo 21:37 | Reserva: lo que el de las 19:37 dejó sin hacer (no corrió, se cortó, falló una subida, Play sin leer). Con la versión ya hecha hace menos de 6 h no hace otra: sube lo que falte y vuelve a avisar solo si sube algo o el primero dijo que se reintentaba |
+| Lunes 1:17 y 4:17 | Eco: vuelve a publicar las órdenes de parar y el `tren-plan` del domingo. ntfy.sh guarda 12 h, y una pulsada el domingo a las 20:00 ya no estaría a las 9:00 |
 | Lunes 9:07 | Si no hay orden de parar para esa versión, por tienda: Play, la release de `alpha` a producción al 100 % con sus notas (`play.py promover`, sin recompilar); App Store, `nueva` (publicación al aprobarse), ficha, capturas de iPhone si cambiaron desde la versión que tiene la tienda, novedades, notas y contacto de revisión, build y `enviar` (reviewSubmissions; si hay un borrador de envío, por ejemplo con In-App Events, va en él). ntfy con lo que salió y lo que no |
+| Lunes 11:07 | Reserva: repite el lunes; lo ya hecho sale como "ya" (Play con esa versión en producción, Apple con esa build enviada) y no avisa de nuevo |
 
 **Una tienda se salta la semana** si tiene la versión anterior en revisión, rechazada o sin publicar,
 y el aviso dice por qué y qué hacer. Si las dos están bloqueadas el domingo, no se gasta número. Una
@@ -226,8 +228,8 @@ nuevo; si lo hay, sale la siguiente minor.
 - **App Store**: el estado de cada versión, por la API. Bloquea todo lo que no sea a la venta,
   reemplazada, retirada o en preparación sin enviar (`LIBRE_IOS` de `tren.py`).
 - **Play**: la API no dice si algo está en revisión (producción enseña la última enviada, aprobada o
-  no). Lo lee el GK35 en *Resumen de publicación* con `TikTok/versiones.mjs play` (domingo 19:15 y cada
-  día 8:45, navegador de solo lectura) y lo publica en el topic secreto como `tren-play <paquete>
+  no). Lo lee el GK35 en *Resumen de publicación* con `TikTok/versiones.mjs play` (domingo 19:15 y 21:15,
+  cada día 8:45 y el lunes también 10:45; si falla, otra lectura al minuto; navegador de solo lectura) y lo publica en el topic secreto como `tren-play <paquete>
   <json>`. Sin lectura de menos de 3 h, Play se salta la semana. El lunes, si lo único en revisión es
   la `alpha` del propio tren, se promociona igual (cancela esa revisión y la reenvía con producción);
   en cualquier otro caso, `ERROR_IF_IN_REVIEW` es la red: Play no pisa nada aunque la lectura falle.
@@ -237,9 +239,16 @@ domingo deja a Play fuera del tren esa semana, y el lunes, con la versión del t
 subida de la ficha falla con `CHANGES_ALREADY_IN_REVIEW` hasta que Google la apruebe.
 
 **Números.** El mismo `versionName` y `versionCode` en las dos tiendas (el fichero de versión de
-Android). Cada tren sube la minor (`2.5.0` a `2.6.0`) y el `versionCode` desde el que haya en main:
-entre semana el `versionCode` solo sube para una build de prueba de TestFlight sin etiqueta
-(`release.yml -f stores=app-store`), y nadie toca `versionName` ni pone etiquetas. La patch es para arreglos urgentes, a mano y
+Android). Cada tren sube la minor (`2.5.0` a `2.6.0`), y el `versionCode` es el mayor usado en
+cualquier sitio más uno: el fichero de main, todo lo que Play ha recibido (`play.py usados`, también
+lo descartado) y todas las builds de App Store Connect, TestFlight incluido (`ios_max_build`). Nadie
+toca `versionName` ni pone etiquetas entre semana.
+
+**Builds de prueba de TestFlight** (lo que el usuario pide para probar en su iPhone con cuenta de
+Apple): `versionCode` del fichero al mayor usado más uno, commit en main y `gh workflow run release.yml
+-R BaltaJmn/<repo> -f stores=app-store`, sin etiqueta. Solo sube a TestFlight. No es una versión
+publicada y no bloquea nada: el tren mira las versiones de App Store, no las builds, y numera por
+encima de ella. La patch es para arreglos urgentes, a mano y
 solo con el sí del usuario: commit con la versión, etiqueta `vX.Y.Z` (que sí lanza `release.yml`) y
 `gh workflow run tren.yml -f paso=lunes -f seco=false` para sacarla.
 
@@ -260,7 +269,19 @@ versión nueva va a la rama `tren-seco` (se borra al acabar), Play solo valida l
 de iOS se exporta sin subir, nada cambia en App Store Connect, los avisos dicen PRUEBA y el botón
 publica `parar prueba ...`, que el tren de verdad no lee. Ni etiqueta ni mensajes para semana.
 
-**Si algo falla**, el aviso lo dice con el paso y la orden para relanzarlo. Sin aviso el domingo
-por la noche ni el lunes por la mañana, GitHub no lanzó la ejecución: `gh run list -R
-BaltaJmn/<repo> --workflow tren.yml` y, si falta, `gh workflow run tren.yml -R BaltaJmn/<repo> -f
-paso=<paso> -f seco=false`.
+**Avisos: suenan solo si algo va mal.** Lo que sale bien llega en silencio (ntfy prioridad 2) y
+queda en la tabla *Versiones*; el aviso del domingo con el botón también, si las dos tiendas salen:
+sin mirarlo, sale igual. Suena (prioridad 4), con por qué y qué hacer: una tienda que se salta la
+semana (revisión, rechazo, estado de Play desconocido), una subida que falló o un paso que se cortó.
+El lunes no vuelve a sonar por lo que el domingo ya dijo que no salía, y el de reserva no repite lo
+que dijo el de las 9:07.
+
+**Reintentos antes de avisar.** `play.py` y `appstore.py` reintentan dos veces los 5xx (y Apple, el
+409 `STATE_ERROR`); la subida a TestFlight, dos veces sin recompilar; ntfy, dos veces. Lo que aun así
+falla en la primera ejecución de un paso (o un Play sin leer) avisa en silencio "se reintenta sola a
+las 21:37 / 4:17 / 11:07", y solo suena si la reserva tampoco lo arregla. `PRIMERA` de `tren.py` y los
+`cron` de `tren.yml` de cada app van juntos.
+
+**Si algo falla** en la reserva, el aviso lo dice con el paso y la orden para relanzarlo: `gh workflow
+run tren.yml -R BaltaJmn/<repo> -f paso=<paso> -f seco=false`. GitHub también manda un correo por cada
+ejecución fallida.

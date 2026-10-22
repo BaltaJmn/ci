@@ -3,7 +3,7 @@ name: Tren de versiones
 # Workflow reutilizable: lo llama el tren.yml de cada app, el domingo, de madrugada y el lunes
 # (PUBLICAR.md, seccion 7). La logica esta en tienda/tren.py; aqui solo el orden de los trabajos.
 # Domingo: plan (numera, commit y etiqueta) > subidas a Play alpha y TestFlight con esa etiqueta >
-# aviso con el boton de parar. Las subidas son llamadas a los otros workflows de este repositorio y
+# aviso con el boton de parar. Cada paso programado tiene una ejecucion de reserva (tren.py, PRIMERA). Las subidas son llamadas a los otros workflows de este repositorio y
 # no un push de etiqueta: lo que empuja GITHUB_TOKEN no dispara otros workflows.
 on:
   workflow_call:
@@ -185,6 +185,11 @@ jobs:
           PLAY_RESULT: ${{ needs.play.result }}
           IOS_RESULT: ${{ needs.ios.result }}
         run: python3 .ci/tienda/tren.py aviso
+      - if: failure()
+        env:
+          APP: ${{ inputs.app }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 .ci/tienda/tren.py fallo domingo
       - if: inputs.seco
         env:
           GH_TOKEN: ${{ github.token }}

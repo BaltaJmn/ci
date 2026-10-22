@@ -18,7 +18,7 @@ bajo `with:` (paquete, CN de la firma, tareas de Gradle, ruta del AAB, fichero d
 |---|---|---|
 | `.github/workflows/release.yml` | Etiqueta `v*`, o a mano | Play (canal `alpha`) y TestFlight con la misma versión |
 | `.github/workflows/listings.yml` | Push a `store/`, o a mano | Comprueba `store/`; a mano, sube la ficha a Play, a la App Store o a las dos |
-| `.github/workflows/tren.yml` | Domingo 19:37, lunes 1:17 y 9:07 (Madrid), o a mano | El tren de versiones de los lunes (FlowTime y Chroma): `PUBLICAR.md` sección 7 |
+| `.github/workflows/tren.yml` | Domingo 19:37, lunes 1:17 y 9:07 (Madrid), cada uno con su reserva (21:37, 4:17, 11:07), o a mano | El tren de versiones de los lunes (FlowTime y Chroma): `PUBLICAR.md` sección 7 |
 
 Una etiqueta sube siempre a los canales de prueba de las dos tiendas. En las apps con tren, producción
 en Play y el envío a revisión de Apple los hace el tren los lunes, con aviso y botón de parar el domingo;

@@ -123,6 +123,16 @@ def tracks(package):
         call("DELETE", url)
 
 
+def usados(package):
+    """The highest versionCode Play ever received: it never takes one again, not even from a release
+    that was discarded."""
+    url = f"{API}{package}/edits/" + call("POST", API + package + "/edits")["id"]
+    try:
+        return max([int(b["versionCode"]) for b in call("GET", url + "/bundles").get("bundles", [])] or [0])
+    finally:
+        call("DELETE", url)
+
+
 def estado(package):
     url = f"{API}{package}/edits/" + call("POST", API + package + "/edits")["id"]
     try:

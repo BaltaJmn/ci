@@ -82,15 +82,18 @@ def api(method, path, body=None):
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"Authorization": "Bearer " + _token(),
                                           "Content-Type": "application/json"})
-    for intento in range(3):  # 5xx sueltos de Apple: dos reintentos
+    # Two retries for what passes on its own: a 5xx, or a 409 STATE_ERROR (a build still processing,
+    # a submission Apple has not settled yet). Any other 409 is a real conflict and fails at once.
+    for intento in range(3):
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 out = r.read()
             break
         except urllib.error.HTTPError as e:
-            if e.code >= 500 and intento < 2:
+            cuerpo = e.read().decode(errors="replace")
+            if intento < 2 and (e.code >= 500 or (e.code == 409 and "STATE_ERROR" in cuerpo)):
                 time.sleep(30 * (intento + 1)); continue
-            sys.exit(f"{method} {path} -> {e.code}: {e.read().decode(errors='replace')[:1500]}")
+            sys.exit(f"{method} {path} -> {e.code}: {cuerpo[:1500]}")
     return json.loads(out) if out else {}
 
 
