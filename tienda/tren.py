@@ -299,8 +299,9 @@ def aviso():
     SECO = p["seco"]  # the stop button of a dry notice says "parar prueba"
     res = {"play": os.environ.get("PLAY_RESULT", ""), "ios": os.environ.get("IOS_RESULT", "")}
     lineas = [linea("Google Play", p["play"], res["play"], p["code"]), linea("iPhone", p["ios"], res["ios"], p["code"])]
-    for k in ("play", "ios"):  # a failed upload means that store does not go out on Monday
-        p[k]["sale"] = p[k]["sale"] and not (p[k]["subir"] and res[k] not in ("success", ""))
+    fallidas = [k for k in ("play", "ios") if p[k]["subir"] and res[k] not in ("success", "")]
+    for k in fallidas:  # a failed upload means that store does not go out on Monday
+        p[k]["sale"] = False
     n = {k: p[k]["notas"] for k in ("play", "ios")}
     nota = lambda x: (f"genericas, porque nadie cambio store/whatsnew desde la {x['base'].lstrip('v')}: " if x["generica"] else "") + x["texto"]
     novedades = (f"Novedades {nota(n['play'])}" if n["play"]["carpeta"] == n["ios"]["carpeta"]
@@ -318,8 +319,10 @@ def aviso():
                             "method": "POST", "body": orden(p["clave"], p["version"]), "clear": True}]}
     else:
         msg = {"title": f"{pre}{p['app']}: mañana no sale nada", "priority": 4,
-               "message": "\n".join(lineas) + "\n\nPor que: el tren semanal no pone una version encima de otra que aun esta en revision, rechazada o sin publicar, y sin tienda libre no gasta numero.\n"
-               "Que hacer: lo que dice cada tienda arriba. El domingo que viene se vuelve a intentar con lo que haya en main."}
+               "message": "\n".join(lineas) + ("\n\nPor que: la subida del domingo fallo, y una tienda sin build del domingo no sale el lunes.\n"
+               "Que hacer: lo que dice cada tienda arriba. Relanzada antes del lunes a las 9:00, llega otro aviso y sale; si no, el domingo que viene va con lo que haya en main."
+               if fallidas else "\n\nPor que: el tren semanal no pone una version encima de otra que aun esta en revision, rechazada o sin publicar, y sin tienda libre no gasta numero.\n"
+               "Que hacer: lo que dice cada tienda arriba. El domingo que viene se vuelve a intentar con lo que haya en main.")}
     msg["click"] = ejecucion()
     ntfy(msg)
     if not p["seco"]:
@@ -472,6 +475,9 @@ def prueba():
         os.environ.update(PLAN_FILE=f.name, NTFY_TOPIC_APROBAR="T", PLAY_RESULT="success", IOS_RESULT="failure")
         enviado.clear(); aviso()
         assert enviado[0]["actions"][0]["body"] == cuerpo and len(enviado) == n and "iPhone: NO sale" in enviado[0]["message"]
+    os.environ["PLAY_RESULT"] = "failure"  # nothing goes out because an upload failed: say relaunch, not "next Sunday"
+    enviado.clear(); aviso()
+    assert "no sale nada" in enviado[0]["title"] and "Relanzada" in enviado[0]["message"] and "sin tienda libre" not in enviado[0]["message"]
     ntfy, publicar = guardados
     SECO = False
     print("prueba: todo bien")
