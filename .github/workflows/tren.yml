@@ -87,7 +87,6 @@ jobs:
       ios: ${{ steps.plan.outputs.ios }}
       notas-play: ${{ steps.plan.outputs.notas-play }}
       aviso: ${{ steps.plan.outputs.aviso }}
-      plan: ${{ steps.plan.outputs.plan }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -105,6 +104,7 @@ jobs:
           BUNDLE: ${{ inputs.bundle-id }}
           VERSION_FILE: ${{ inputs.version-file }}
           SECO: ${{ inputs.seco }}
+          PLAN_FILE: ${{ runner.temp }}/plan.json
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -112,6 +112,13 @@ jobs:
           APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
           APPSTORE_PRIVATE_KEY: ${{ secrets.APPSTORE_PRIVATE_KEY }}
         run: python3 .ci/tienda/tren.py domingo .
+      # El plan va como fichero y no como output: GitHub tira cualquier output con un trozo de un
+      # secreto, y la { del JSON de Play lo es (tambien en base64).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: ${{ runner.temp }}/plan.json
+          retention-days: 7
       - if: failure()
         env: *entorno
         run: python3 .ci/tienda/tren.py fallo domingo
@@ -166,11 +173,15 @@ jobs:
         with:
           repository: BaltaJmn/ci
           path: .ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+          path: ${{ runner.temp }}
       - env:
           APP: ${{ inputs.app }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
-          PLAN: ${{ needs.plan.outputs.plan }}
+          PLAN_FILE: ${{ runner.temp }}/plan.json
           PLAY_RESULT: ${{ needs.play.result }}
           IOS_RESULT: ${{ needs.ios.result }}
         run: python3 .ci/tienda/tren.py aviso
