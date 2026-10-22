@@ -303,9 +303,9 @@ def aviso():
     for k in fallidas:  # a failed upload means that store does not go out on Monday
         p[k]["sale"] = False
     n = {k: p[k]["notas"] for k in ("play", "ios")}
-    nota = lambda x: (f"genericas, porque nadie cambio store/whatsnew desde la {x['base'].lstrip('v')}: " if x["generica"] else "") + x["texto"]
-    novedades = (f"Novedades {nota(n['play'])}" if n["play"]["carpeta"] == n["ios"]["carpeta"]
-                 else f"Novedades en Play {nota(n['play'])}\nNovedades en iPhone {nota(n['ios'])}")
+    nota = lambda x: (f" genericas, porque nadie cambio store/whatsnew desde la {x['base'].lstrip('v')}" if x["generica"] else "") + ":\n" + x["texto"]
+    novedades = (f"Novedades{nota(n['play'])}" if n["play"]["carpeta"] == n["ios"]["carpeta"]
+                 else f"Novedades en Play{nota(n['play'])}\n\nNovedades en iPhone{nota(n['ios'])}")
     pre = "PRUEBA, no sale nada de verdad. " if p["seco"] else ""
     if p["play"]["sale"] or p["ios"]["sale"]:
         que = [x for x, k in (("en Google Play, a produccion al 100 %", "play"), ("en iPhone, a revision de Apple, que la publica sola al aprobarla", "ios")) if p[k]["sale"]]
@@ -475,6 +475,7 @@ def prueba():
         os.environ.update(PLAN_FILE=f.name, NTFY_TOPIC_APROBAR="T", PLAY_RESULT="success", IOS_RESULT="failure")
         enviado.clear(); aviso()
         assert enviado[0]["actions"][0]["body"] == cuerpo and len(enviado) == n and "iPhone: NO sale" in enviado[0]["message"]
+        assert enviado[0]["message"].startswith("Novedades:\nNuevo\n")
     os.environ["PLAY_RESULT"] = "failure"  # nothing goes out because an upload failed: say relaunch, not "next Sunday"
     enviado.clear(); aviso()
     assert "no sale nada" in enviado[0]["title"] and "Relanzada" in enviado[0]["message"] and "sin tienda libre" not in enviado[0]["message"]
