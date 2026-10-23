@@ -203,7 +203,7 @@ La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 c
 con su captura para la revisión, privacidad publicada, China fuera, idioma principal inglés y
 RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la oferta actual).
 
-## 7. El tren de los lunes (FlowTime y Chroma, desde el 26-10-2026)
+## 7. El tren de los lunes (todas las apps; hoy FlowTime y Chroma, desde el 26-10-2026)
 
 Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance. Lo decidió el usuario
 el 22-10-2026 porque se enviaban versiones encima de otras aún en revisión y cada una reiniciaba la
@@ -220,8 +220,16 @@ la hora en punto GitHub retrasa, y puede tirar, las ejecuciones programadas.
 | Lunes 9:07 | Si no hay orden de parar para esa versión, por tienda: Play, la release de `alpha` a producción al 100 % con sus notas (`play.py promover`, sin recompilar); App Store, `nueva` (publicación al aprobarse), ficha, capturas de iPhone si cambiaron desde la versión que tiene la tienda, novedades, notas y contacto de revisión, build y `enviar` (reviewSubmissions; si hay un borrador de envío, por ejemplo con In-App Events, va en él). ntfy con lo que salió y lo que no |
 | Lunes 11:07 | Reserva: repite el lunes; lo ya hecho sale como "ya" (Play con esa versión en producción, Apple con esa build enviada) y no avisa de nuevo |
 
-**Una tienda se salta la semana** si tiene la versión anterior en revisión, rechazada o sin publicar,
-y el aviso dice por qué y qué hacer. Si las dos están bloqueadas el domingo, no se gasta número. Una
+**Las dos tiendas o ninguna** (el usuario, 23-10-2026: Android y iPhone llevan siempre la misma
+versión). Si una tienda tiene la versión anterior en revisión, rechazada o sin publicar, se salta la
+semana y la otra la espera; el aviso dice por qué y qué hacer. Lo decide el domingo, lo vuelve a mirar
+el lunes antes de sacar nada (`juntas()`), y si Play falla al promocionar, el iPhone tampoco sale.
+Solo si una tienda va por detrás (la otra ya tiene esa versión) sale sola, para alcanzarla. Sin salida
+no se gasta número. Si Apple aprueba la anterior entre el domingo y el lunes, se pierde esa semana: el
+domingo no subió nada.
+
+**Cualquier app nueva entra en el tren** desde su primera versión publicada en las dos tiendas, con el
+mismo `tren.yml` (decisión del usuario, 23-10-2026). Una
 versión parada o que no salió en una tienda se vuelve a anunciar el domingo siguiente si no hay nada
 nuevo; si lo hay, sale la siguiente minor.
 
