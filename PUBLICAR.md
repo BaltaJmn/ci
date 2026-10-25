@@ -266,6 +266,11 @@ esa tienda tiene, salen las genéricas de `store/whatsnew-generic` ("Arreglos y 
 del domingo lo dice. Las de Play se fijan al subir a `alpha` el domingo; las de Apple salen de la
 etiqueta, no de main.
 
+**Deshacer un "Parar esta semana"** (antes del lunes a las 9:07): borrar en ntfy cada mensaje
+`parar tren <clave> <versión>` (`DELETE https://ntfy.sh/<topic>/<id>`; el id sale al leer el topic). `tren.py` descarta
+los mensajes borrados (ntfy los sigue dando con un evento `message_delete` aparte), así que ni el eco los repite ni el
+lunes los ve.
+
 **El topic secreto** (`ntfy-topic-aprobar`, el de los botones de `TikTok/lote.mjs`, que ignora estas
 líneas) lleva: `parar tren <clave> <versión>` (el botón), `tren-play <paquete> <json>` (GK35),
 `tren-plan <clave> <json>` y `tren-lunes <clave> <json>` (el tren, para la tabla *Versiones* de

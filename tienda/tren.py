@@ -148,9 +148,16 @@ def publicar(texto):
     _ntfy(urllib.request.Request(f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}", texto.encode(), method="POST"))
 
 
+def vivos(eventos):
+    """The topic's messages minus the ones deleted in ntfy (DELETE /<topic>/<id>, which ntfy reports as a separate
+    message_delete event): deleting a 'parar tren' order undoes it."""
+    borrados = {e.get("sequence_id") for e in eventos if e.get("event") == "message_delete"}
+    return [m for m in eventos if m.get("event") == "message" and (m.get("sequence_id") or m.get("id")) not in borrados]
+
+
 def leer_topic():
     out = _ntfy(urllib.request.Request(f"https://ntfy.sh/{env('NTFY_TOPIC_APROBAR')}/json?poll=1&since=12h"))
-    return [m for m in map(json.loads, out.decode().splitlines()) if m.get("event") == "message"]
+    return vivos([json.loads(l) for l in out.decode().splitlines() if l.strip()])
 
 
 def del_tren(msgs, tipo, clave, nombre=None):
@@ -575,6 +582,9 @@ def prueba():
     SECO = True
     assert not parada(msgs, "flowtime", "2.6.0") and orden("chroma", "1.3.0") == "parar prueba chroma 1.3.0"
     SECO = False
+    ev = [{"event": "message", "id": "a", "message": "parar tren chroma 1.3.0"}, {"event": "message_delete", "id": "b", "sequence_id": "a"},
+          {"event": "message", "id": "c", "message": "parar tren chroma 1.3.0"}]
+    assert parada(vivos(ev), "chroma", "1.3.0") and not parada(vivos(ev[:2]), "chroma", "1.3.0")  # a deleted stop no longer stops
     ahora = datetime.datetime(2026, 10, 26, 7, 7, tzinfo=datetime.timezone.utc).timestamp()
     est = lambda e, items=(), h=0.3: {"leido": datetime.datetime.fromtimestamp(ahora - h * 3600, datetime.timezone.utc).isoformat(),
                                       "estado": e, "items": [list(i) for i in items]}
