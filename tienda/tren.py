@@ -13,9 +13,11 @@ app calls from its own tren.yml:
     tren.py fallo <paso>     notice when a step broke before its own notice
     tren.py --prueba         checks without network
 
-Each scheduled step has a reserve run two or three hours later (PRIMERA): GitHub may drop a scheduled run,
-and what failed for a passing reason (an upload, an API, an unknown Play state) gets a second try there
-before it sounds. A reserve run after a good first one does nothing. Notices sound only for a rejection
+The GK35 starts each step at its Madrid time (its crontab, gh workflow run) and runs it twice, the second
+as a reserve two or three hours later (RESERVA); tren.yml's schedule at the same times is only the backup,
+since GitHub starts scheduled runs hours late (1.5 to 6 h on 25 and 26-10). What failed for a passing reason
+(an upload, an API, an unknown Play state) gets a second try in the reserve before it sounds. Any later run
+of a step does only what is missing and repeats no notice, so a double start changes nothing. Notices sound only for a rejection
 (Apple or Google) or a failure the reserve run did not fix; the rest arrives silent (ntfy priority 2):
 what goes out, and a store waiting for a review or a release, where there is nothing to do.
 
@@ -25,7 +27,7 @@ from Play Console and the train's own messages for semana.baltajmn.dev), SECO=tr
 the credentials play.py and appstore.py read. Dry: nothing is pushed to main, no tag, Play only
 validates, nothing changes in App Store Connect, notices say PRUEBA and stop orders say "parar prueba".
 """
-import datetime, json, os, pathlib, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request
+import datetime, json, os, pathlib, re, subprocess, sys, time, urllib.error, urllib.parse, urllib.request, zoneinfo
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import appstore, play  # noqa: E402
@@ -33,10 +35,13 @@ import appstore, play  # noqa: E402
 NOTAS, GENERICAS = "store/whatsnew", "store/whatsnew-generic"
 # A week with only these changes makes no version: documentation, workflows and IDE files.
 FUERA = [":(exclude)*.md", ":(exclude).github", ":(exclude).idea"]
-FRESCO = 3 * 3600  # the GK35 reads Play Console 20 minutes before each train; older than 3 h, unknown
+# The GK35 reads Play Console 22 minutes before it starts each train. Older than 3 h, unknown: an old "only the
+# train's own alpha is in review" would let Monday cancel a review that came in after it.
+FRESCO = 3 * 3600
 DESCONOCIDO = "no se en que estado esta Play"
-# The first scheduled run of each step (cron of the app's tren.yml) and the time of its reserve run.
-PRIMERA = {"37 19 * * 0": "21:37", "17 1 * * 1": "4:17", "7 9 * * 1": "11:07"}
+MADRID = zoneinfo.ZoneInfo("Europe/Madrid")
+# Step: (weekday, Monday 0; time of its reserve run in Madrid), the GK35's crontab. Goes with it.
+RESERVA = {"domingo": (6, "21:37"), "lunes": (0, "11:07")}
 # App Store states that leave the way free. Anything else on any version blocks (in review, pending
 # release, rejected, processing...): the train never piles a version on top of another.
 LIBRE_IOS = {"READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_VERSION", "REMOVED_FROM_SALE",
@@ -174,13 +179,14 @@ def del_tren(msgs, tipo, clave, nombre=None):
     return None
 
 
-def reserva():
-    """The reserve run's time when this is the first scheduled run of its step, else None."""
-    try:
-        with open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8") as f:
-            return PRIMERA.get(json.load(f).get("schedule"))
-    except (KeyError, OSError, ValueError):
+def reserva(paso, ahora=None):
+    """The reserve run's time while it is still to come today, else None (this is the last chance). By the
+    clock and not by who started the run: the GK35, GitHub's late backup or a person all get it right."""
+    if SECO or paso not in RESERVA:
         return None
+    dia, hora = RESERVA[paso]
+    t = ahora or datetime.datetime.now(MADRID)
+    return hora if t.weekday() == dia and f"{t.hour:02}:{t.minute:02}" < hora.zfill(5) else None
 
 
 def ejecucion():
@@ -304,16 +310,19 @@ def salida(**kv):
 
 # ---------- Sunday ----------
 def domingo(repo):
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and datetime.datetime.now(MADRID).weekday() != 6:
+        # GitHub's backup, hours late: after midnight the 6 h below no longer cover a version made at 19:37,
+        # and a push on Monday would make another one on top of the one going out
+        return print("domingo programado que GitHub arranca ya en lunes: no hago nada (el GK35 lo lanzo a su hora)")
     app, clave, paquete, bundle, vf = env("APP"), env("CLAVE"), env("PAQUETE"), env("BUNDLE"), env("VERSION_FILE")
     texto = (pathlib.Path(repo) / vf).read_text(encoding="utf-8")
     ultima = ultima_etiqueta(repo)
     msgs, ahora = leer_topic(), datetime.datetime.now(datetime.timezone.utc).timestamp()
     pistas, vers = play.tracks(paquete), ios_versiones(bundle)
     prod_play, alpha, env_ios = produccion_play(pistas), alpha_play(pistas), enviada_ios(vers)
-    # The reserve run of a Sunday whose first run already made the version: the same one, only what is
-    # missing (an upload that failed, Play now readable), never a second version
-    hecha = (not SECO and os.environ.get("GITHUB_EVENT_NAME") == "schedule"
-             and ahora - int(git(repo, "log", "-1", "--format=%ct", ultima)) < 6 * 3600)
+    # A later run of a Sunday whose version is already made (the reserve, GitHub's backup, a relaunch): the
+    # same one, only what is missing (an upload that failed, Play now readable), never a second version
+    hecha = not SECO and ahora - int(git(repo, "log", "-1", "--format=%ct", ultima)) < 6 * 3600
     hasta, base = (ultima, git(repo, "describe", "--tags", "--abbrev=0", "--match", "v*", f"{ultima}^", check=False) or ultima) if hecha else ("HEAD", ultima)
     cambios = git(repo, "diff", "--name-only", base, hasta, "--", ".", *FUERA).split()
     nuevo = None
@@ -333,7 +342,7 @@ def domingo(repo):
     tf = {} if nuevo else ios_builds(bundle, nombre)
     plan = {
         "app": app, "clave": clave, "version": nombre, "code": code, "nueva": bool(nuevo), "cambios": len(cambios),
-        "ultima": base, "seco": SECO, "reintento": reserva(),
+        "ultima": base, "seco": SECO, "reintento": reserva("domingo"),
         "play": {"falta": falta_play, "sale": sale_play, "bloqueo": b_play, "produccion": prod_play,
                  "subir": SECO or (sale_play and code not in alpha),
                  "notas": notas_para(repo, prod_play, hasta)},
@@ -469,7 +478,7 @@ def lunes(repo):
     git(repo, "checkout", "-q", tag)  # listing, screenshots and notes as they were built, not today's main
     msgs, ahora = leer_topic(), datetime.datetime.now(datetime.timezone.utc).timestamp()
     pre = "PRUEBA, no ha salido nada de verdad. " if SECO else ""
-    luego = reserva()  # passing troubles wait for the reserve run before they sound
+    luego = reserva("lunes")  # passing troubles wait for the reserve run before they sound
     prev = None if SECO else del_tren(msgs, "lunes", clave, nombre)  # the 9:07 run, seen from the reserve one
     # Dry, the stop order to look for is the one of the dry Sunday notice: the version it would have made
     anunciada = subir_minor((pathlib.Path(repo) / env("VERSION_FILE")).read_text(encoding="utf-8"))[1] if SECO else nombre
@@ -561,7 +570,7 @@ def avisar_lunes(res, prev, plan):
 
 
 def fallo(paso):
-    luego = reserva()
+    luego = reserva(paso)
     ntfy({"title": f"El tren de {env('APP')} fallo ({paso})", "priority": 2 if luego else 4, "click": ejecucion(),
           "message": f"La ejecucion del {paso} se corto antes de acabar.\n\nPor que: un error de la API de una tienda, de ntfy o de git; "
                      "el detalle esta en el paso en rojo (tocar este aviso).\n"
@@ -581,7 +590,13 @@ def prueba():
     assert parada(msgs, "flowtime", "2.6.0") and not parada(msgs, "flowtime", "2.7.0") and not parada(msgs, "chroma", "2.6.0")
     SECO = True
     assert not parada(msgs, "flowtime", "2.6.0") and orden("chroma", "1.3.0") == "parar prueba chroma 1.3.0"
+    m = lambda d, h, mi: datetime.datetime(2026, 10, d, h, mi, tzinfo=MADRID)  # Sunday 25-10, Monday 26-10
+    assert reserva("domingo", m(25, 19, 38)) is None  # dry: no reserve run comes
     SECO = False
+    assert reserva("domingo", m(25, 19, 38)) == "21:37" and reserva("domingo", m(25, 21, 37)) is None  # the reserve itself
+    assert reserva("domingo", m(26, 0, 30)) is None and reserva("eco", m(26, 1, 17)) is None
+    assert reserva("lunes", m(26, 9, 7)) == "11:07" and reserva("lunes", m(26, 10, 59)) == "11:07"
+    assert reserva("lunes", m(26, 11, 8)) is None and reserva("lunes", m(26, 16, 7)) is None  # GitHub's backup, late
     ev = [{"event": "message", "id": "a", "message": "parar tren chroma 1.3.0"}, {"event": "message_delete", "id": "b", "sequence_id": "a"},
           {"event": "message", "id": "c", "message": "parar tren chroma 1.3.0"}]
     assert parada(vivos(ev), "chroma", "1.3.0") and not parada(vivos(ev[:2]), "chroma", "1.3.0")  # a deleted stop no longer stops

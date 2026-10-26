@@ -208,9 +208,17 @@ RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la
 Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance. Lo decidió el usuario
 el 22-10-2026 porque se enviaban versiones encima de otras aún en revisión y cada una reiniciaba la
 revisión de la anterior. `tren.yml` de cada app (igual en todas salvo `with:`) llama a
-`.github/workflows/tren.yml` de este repositorio, y la lógica vive en `tienda/tren.py`. Relojes en
-GitHub Actions, con `timezone: Europe/Madrid` (el cambio de hora lo pone GitHub) y minutos raros: a
-la hora en punto GitHub retrasa, y puede tirar, las ejecuciones programadas.
+`.github/workflows/tren.yml` de este repositorio, y la lógica vive en `tienda/tren.py`.
+
+**El reloj es el GK35** (desde el 26-10-2026). Su crontab, en hora de Madrid (el cambio de hora lo
+pone el sistema), lanza cada paso de cada app de `APPS` de `TikTok/versiones.mjs` con `node
+versiones.mjs tren <paso> [hora de la reserva]`, que hace `gh workflow run tren.yml -R BaltaJmn/<repo>
+-f paso=<paso> -f seco=false` con la sesión de `gh` del GK35. Los `schedule` de `tren.yml` de cada
+app, a las mismas horas (`timezone: Europe/Madrid`, minutos raros), quedan de respaldo: el 25 y el
+26-10 GitHub los arrancó con 1,5 a 6 h de retraso, el lunes ya no había lectura reciente de Play y
+Chroma 1.3.0 no salió. Si `gh` falla dos veces, el GK35 avisa con el error y la orden para lanzarlo a
+mano (en silencio si aún queda la reserva). Una app nueva en el tren: su línea en `APPS` (repo y
+*Resumen de publicación* de Play), que sirve a la vez para leer Play y para lanzarla.
 
 | Cuándo | Qué hace |
 |---|---|
@@ -236,9 +244,13 @@ nuevo; si lo hay, sale la siguiente minor.
 - **App Store**: el estado de cada versión, por la API. Bloquea todo lo que no sea a la venta,
   reemplazada, retirada o en preparación sin enviar (`LIBRE_IOS` de `tren.py`).
 - **Play**: la API no dice si algo está en revisión (producción enseña la última enviada, aprobada o
-  no). Lo lee el GK35 en *Resumen de publicación* con `TikTok/versiones.mjs play` (domingo 19:15 y 21:15,
-  cada día 8:45 y el lunes también 10:45; si falla, otra lectura al minuto; navegador de solo lectura) y lo publica en el topic secreto como `tren-play <paquete>
-  <json>`. Sin lectura de menos de 3 h, Play se salta la semana. El lunes, si lo único en revisión es
+  no). Lo lee el GK35 en *Resumen de publicación* con `TikTok/versiones.mjs play` 22 min antes de
+  lanzar cada tren (domingo 19:15 y 21:15, cada día 8:45 y el lunes también 10:45; si falla, otra
+  lectura al minuto; navegador de solo lectura) y lo publica en el topic secreto como `tren-play <paquete>
+  <json>`. Sin lectura de menos de 3 h, Play se salta la semana: una lectura vieja que dijera "solo la
+  `alpha` del tren en revisión" dejaría al lunes cancelar una revisión que entró después. Con el GK35
+  lanzando el tren, la lectura tiene minutos; solo un respaldo tardío de GitHub la ve vieja, y para
+  entonces el tren ya salió o ya dijo por qué no. El lunes, si lo único en revisión es
   la `alpha` del propio tren, se promociona igual (cancela esa revisión y la reenvía con producción);
   en cualquier otro caso, `ERROR_IF_IN_REVIEW` es la red: Play no pisa nada aunque la lectura falle.
 
@@ -294,9 +306,18 @@ repite lo que dijo el de las 9:07.
 
 **Reintentos antes de avisar.** `play.py` y `appstore.py` reintentan dos veces los 5xx (y Apple, el
 409 `STATE_ERROR`); la subida a TestFlight, dos veces sin recompilar; ntfy, dos veces. Lo que aun así
-falla en la primera ejecución de un paso (o un Play sin leer) avisa en silencio "se reintenta sola a
-las 21:37 / 4:17 / 11:07", y solo suena si la reserva tampoco lo arregla. `PRIMERA` de `tren.py` y los
-`cron` de `tren.yml` de cada app van juntos.
+falla antes de la reserva de un paso (o un Play sin leer) avisa en silencio "se reintenta sola a las
+21:37 / 11:07", y solo suena si la reserva tampoco lo arregla. `tren.py` sabe si aún queda reserva por
+el reloj de Madrid (`RESERVA`), la arranque quien la arranque: el GK35, el respaldo de GitHub o una
+persona. `RESERVA` y el crontab del GK35 van juntos.
+
+**Un disparo doble no cambia nada.** El GK35 y el respaldo de GitHub lanzan cada paso, y
+`concurrency: tren` los pone en fila. El segundo domingo, con la versión hecha hace menos de 6 h, no
+hace otra: sube solo lo que falte y avisa solo si sube algo o el primero dijo que se reintentaba. Un
+domingo programado que GitHub arranca ya en lunes no hace nada (con un push del lunes haría otra
+versión encima de la que sale). El segundo lunes ve "ya" en cada tienda (Play con esa versión en
+producción, Apple con esa build enviada) o el mismo motivo de antes, y no vuelve a avisar. El eco
+repite las órdenes de parar, que no pasa nada por tenerlas dos veces.
 
 **Si algo falla** en la reserva, el aviso lo dice con el paso y la orden para relanzarlo: `gh workflow
 run tren.yml -R BaltaJmn/<repo> -f paso=<paso> -f seco=false`. GitHub también manda un correo por cada
