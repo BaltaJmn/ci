@@ -211,7 +211,7 @@ def estado_play(msgs, paquete):
 def bloqueo_play(est, ahora, code=None):
     """(reason, cancel) for Play. `code`: the train's own alpha release, which may still be in review on
     Monday morning; if it is the only thing in review, promoting cancels and resends it with production."""
-    que_hacer_gk = "en el GK35, node ~/AndroidStudioProjects/TikTok/versiones.mjs play (si dice 'Sin sesion', login de play por noVNC)."
+    que_hacer_gk = "en el GK35, node ~/AndroidStudioProjects/gk/control/versiones.mjs play (si dice 'Sin sesion', login de play por noVNC)."
     if not est:
         return f"{DESCONOCIDO}: el GK35 no lo ha publicado en las ultimas 12 h. Que hacer: {que_hacer_gk}", False
     leido = datetime.datetime.fromisoformat(est["leido"].replace("Z", "+00:00")).timestamp()
