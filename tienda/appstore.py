@@ -22,7 +22,7 @@ from APPSTORE_KEY_ID, APPSTORE_ISSUER_ID and APPSTORE_PRIVATE_KEY (CI), or else 
 
 `ficha` creates the missing locales and patches the ones that differ; support and privacy URLs are
 the ones the en-US locale already has. `capturas` only fills locales that have no 6,9" screenshots,
-and deletes nothing unless `--reemplazar`, which swaps the ones of every locale that has a folder. Folder names may carry a region Apple does not use (it-IT is `it`). By hand,
+and deletes nothing unless `--reemplazar`, which swaps the ones of every locale that has a folder. Folder names may carry a region Apple does not use (it-IT is `it`, zh-TW is `zh-Hant`). By hand,
 sending to review stays in the web: the first non-consumable purchase of an app can only go in the
 same submission as a version, and the API does not add it. `enviar` is for the train's versions.
 """
@@ -37,6 +37,9 @@ ASC_LOCALES = {"ar-SA", "ca", "cs", "da", "de-DE", "el", "en-AU", "en-CA", "en-G
 
 
 def asc_locale(folder):
+    # zh-TW (the Play name, which the contract makes every store use) is Traditional Chinese in Apple
+    if folder == "zh-TW":
+        return "zh-Hant"
     return folder if folder in ASC_LOCALES else folder.split("-")[0]
 
 
