@@ -42,9 +42,9 @@ store/events/<evento>/{event.json,card.png,details.png}                opcional,
 
 - **Los mismos idiomas en las dos fichas y en las notas**, con la región siempre (`it-IT`, no `it`):
   `appstore.py` la quita donde Apple no la usa (y `zh-TW` lo sube como `zh-Hant`). Son los idiomas de
-  la interfaz: trece en todas, y FlowTime además hindi. Excepción: FlowTime lleva también `vi` y
-  `zh-TW` solo en las fichas, con la app en inglés (26-10-2026: Vietnam y Taiwán buscan mucho "study
-  with me", ver los Study with me de Bots).
+  la interfaz: trece en todas, y FlowTime además hindi. Excepción: FlowTime, Chroma y Quilt llevan
+  también `vi` y `zh-TW` solo en las fichas, con la app en inglés y la ficha diciéndolo (26-10-2026:
+  los videos del canal de las apps salen traducidos a esos dos idiomas, ver traducir-apps.mjs de Bots).
 - **Idioma por defecto inglés** en las dos tiendas. Los idiomas sin capturas propias heredan las
   inglesas.
 - **Contacto**: `baltajmn@gmail.com` y la web de la app (`https://<app>.baltajmn.dev/`), que es también
