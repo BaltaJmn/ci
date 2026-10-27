@@ -123,11 +123,12 @@ ficha de Play con `~/keys/play.sh ficha` en local, hasta que se arregle la factu
 o pase a público. Ojo: los workflows de fichas también se paran, y en silencio: en Play, FlowTime se
 quedó en 6 idiomas de 14 y MoodTraker en 5 de 13 (subidas todas el 05-10-2026).
 
-**Privados, a mano (27-10-2026).** MoodTraker, Quilt (`quilt`, privado otra vez) y Sleeper se
-construyen y publican en local: `bundleRelease` + `~/keys/play.sh aab`, `~/keys/testflight.sh` y
-`appstore.py`. Ni el repo público intermedio ni abrir el repo mientras corre: los registros y
-artefactos quedarían públicos y es saltarse la facturación. Sus workflows solo tienen
-`workflow_dispatch`: ningún push ni etiqueta dispara nada, y no entran en el tren (sección 7).
+**Privados (27-10-2026).** Quilt (`quilt`, privado otra vez) y MoodTraker van en el tren con los
+2.000 minutos gratis del mes mientras duren; agotados, y siempre Sleeper, se construyen y publican en
+local: `bundleRelease` + `~/keys/play.sh aab`, `~/keys/testflight.sh` y `appstore.py`. Ni el repo
+público intermedio ni abrir el repo mientras corre: los registros y artefactos quedarían públicos y es
+saltarse la facturación. Sus workflows solo tienen `workflow_dispatch`: ningún push ni etiqueta
+dispara nada, y su `tren.yml` no tiene `schedule` (sección 7).
 
 **App Groups.** Solo existía el de Chroma, y FlowTime, Quilt y MoodTraker no firmaban para la App
 Store por eso. Es el paso 8 de la sección 4.
@@ -209,7 +210,7 @@ La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 c
 con su captura para la revisión, privacidad publicada, China fuera, idioma principal inglés y
 RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la oferta actual).
 
-## 7. El tren de los lunes (todas las apps; hoy FlowTime y Chroma, desde el 26-10-2026)
+## 7. El tren de los lunes (FlowTime y Chroma desde el 26-10-2026, Quilt desde el 27-10; MoodTraker al tener acceso a producción)
 
 Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance ni tenga que tocar nada
 (el usuario, 22 y 27-10-2026). `tren.yml` de cada app (igual en todas salvo `with:`) llama a
@@ -222,12 +223,15 @@ GK35), y cada 30 min `node versiones.mjs reintento` relanza el lunes mientras el
 de esa app diga que una tienda espera, y el domingo si le falta su build. Los `schedule` de `tren.yml`
 de cada app, a las mismas horas, quedan de respaldo: el 25 y el 26-10 GitHub los arrancó con 1,5 a 6 h
 de retraso. Una app nueva en el tren: su línea en `APPS` (repo y *Resumen de publicación* de Play).
+Una privada lleva `privado: true` en `APPS` y su `tren.yml` va sin `schedule`: cada arranque sale de
+los 2.000 minutos gratis del mes (macOS x10, unos 170 por build de iPhone), así que su lunes se
+reintenta cada 3 h y no cada 30 min.
 
 | Cuándo | Qué hace |
 |---|---|
 | Domingo 19:37 | Si hay cambios en main desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`), sube la minor y el `versionCode`, deja el commit `tren: <App> X.Y.0 (N)` y la etiqueta `vX.Y.0`, y llama a `android-play-release.yml` y a `ios-testflight-release.yml` con `ref` de esa etiqueta (lo que empuja `GITHUB_TOKEN` no dispara otros workflows). Play solo valida el paquete, que queda como artefacto `aab-vX.Y.0` de la ejecución (21 días): subirlo el domingo chocaría con cualquier revisión en curso. Al acabar, ntfy "<App> X.Y.0 sale el lunes" con el botón "Parar esta semana" |
 | Domingo 21:37 | Reserva. Con la versión de esta semana ya hecha (desde el domingo 19:00) no hace otra: construye lo que falte. Fuera del domingo desde las 19:00 el paso nunca numera |
-| Lunes 1:17 y 4:17 | Eco: vuelve a publicar las órdenes de parar y el `tren-plan`. ntfy.sh guarda 12 h |
+| Lunes 1:17 y 4:17 | Eco: vuelve a publicar las órdenes de parar y el `tren-plan`. ntfy.sh guarda 12 h. Desde el 27-10 lo corre el GK35 con `tienda/tren.py eco`, sin Actions |
 | Lunes 9:07 | Si no hay orden de parar: primero mira el iPhone por la API (versiones y envíos a revisión), luego sube el paquete del domingo a producción al 100 % con sus notas (`play.py aab`, `ERROR_IF_IN_REVIEW`) y solo si Play lo acepta manda el iPhone: `nueva` (publicación al aprobarse), ficha, capturas si cambiaron, novedades, notas, build y `enviar` |
 | Lunes 11:07 y cada 30 min | Mientras una tienda espera, el GK35 lo relanza (`:22` y `:52`); lo hecho sale "ya" y no se repite. Nunca del domingo 19:00 al lunes 9:07, el plazo del botón |
 

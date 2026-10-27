@@ -67,6 +67,13 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v5
 
+      # The Kotlin/Native compiler and its LLVM, which every fresh runner downloads and unpacks again.
+      # Keyed on the version catalog, where the Kotlin version lives.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('gradle/libs.versions.toml') }}
+
       # Both identities come from secrets, for two different reasons. Without the development one,
       # -allowProvisioningUpdates mints a new certificate on every run of a fresh runner until the
       # team hits Apple's cap. Without the distribution one, Xcode signs the export in the cloud:
