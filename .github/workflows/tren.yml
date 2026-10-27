@@ -2,11 +2,12 @@ name: Tren de versiones
 
 # Workflow reutilizable: lo llama el tren.yml de cada app, el domingo, de madrugada y el lunes
 # (PUBLICAR.md, seccion 7). La logica esta en tienda/tren.py; aqui solo el orden de los trabajos.
-# Domingo: plan (numera, commit y etiqueta) > subidas a Play alpha y TestFlight con esa etiqueta >
-# aviso con el boton de parar. Cada paso corre dos veces, la segunda de reserva (tren.py, RESERVA), y
-# lo lanza el GK35 a su hora (gh workflow run); el schedule de cada app es el respaldo. Las subidas son
-# llamadas a los otros workflows de este repositorio y no un push de etiqueta: lo que empuja
-# GITHUB_TOKEN no dispara otros workflows.
+# Domingo: plan (numera, commit y etiqueta) > paquete de Play (Play lo valida y queda como artefacto
+# aab-<etiqueta>) y TestFlight con esa etiqueta > aviso con el boton de parar. Lunes: ese paquete a
+# produccion y la build a revision de Apple. Lo lanza el GK35 a su hora y cada 30 min mientras una tienda
+# espera (gh workflow run); el schedule de cada app es el respaldo. Las subidas son llamadas a los otros
+# workflows de este repositorio y no un push de etiqueta: lo que empuja GITHUB_TOKEN no dispara otros
+# workflows.
 on:
   workflow_call:
     inputs:
@@ -80,9 +81,11 @@ jobs:
   plan:
     if: inputs.paso == 'domingo'
     runs-on: ubuntu-latest
-    # Empuja el commit de la version y su etiqueta (en seco, la rama tren-seco).
+    # Empuja el commit de la version y su etiqueta (en seco, la rama tren-seco) y mira si el paquete de
+    # Play ya esta guardado.
     permissions:
       contents: write
+      actions: read
     outputs:
       ref: ${{ steps.plan.outputs.ref }}
       play: ${{ steps.plan.outputs.play }}
@@ -107,6 +110,7 @@ jobs:
           VERSION_FILE: ${{ inputs.version-file }}
           SECO: ${{ inputs.seco }}
           PLAN_FILE: ${{ runner.temp }}/plan.json
+          GH_TOKEN: ${{ github.token }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
@@ -134,10 +138,13 @@ jobs:
       signer-cn: ${{ inputs.signer-cn }}
       gradle-tasks: ${{ inputs.gradle-tasks }}
       aab-path: ${{ inputs.aab-path }}
+      # Play solo valida: subir el domingo chocaria con cualquier revision en curso. El lunes sube este
+      # artefacto a produccion (tren.py, subir_play).
       track: alpha
       whatsnew-dir: ${{ needs.plan.outputs.notas-play }}
       ref: ${{ needs.plan.outputs.ref }}
-      dry-run: ${{ inputs.seco }}
+      dry-run: true
+      artefacto: aab-${{ needs.plan.outputs.ref }}
     secrets:
       KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
       KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
@@ -184,14 +191,14 @@ jobs:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
           PLAN_FILE: ${{ runner.temp }}/plan.json
-          PLAY_RESULT: ${{ needs.play.result }}
-          IOS_RESULT: ${{ needs.ios.result }}
         run: python3 .ci/tienda/tren.py aviso
       - if: failure()
         env:
           APP: ${{ inputs.app }}
+          CLAVE: ${{ inputs.clave }}
           SECO: ${{ inputs.seco }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
         run: python3 .ci/tienda/tren.py fallo domingo
       - if: inputs.seco
         env:
@@ -217,6 +224,10 @@ jobs:
   lunes:
     if: inputs.paso == 'lunes'
     runs-on: ubuntu-latest
+    # Baja el paquete de Play que guardo el domingo.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v5
         with:
@@ -237,6 +248,7 @@ jobs:
           BUNDLE: ${{ inputs.bundle-id }}
           VERSION_FILE: ${{ inputs.version-file }}
           SECO: ${{ inputs.seco }}
+          GH_TOKEN: ${{ github.token }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           NTFY_TOPIC_APROBAR: ${{ secrets.NTFY_TOPIC_APROBAR }}
           PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}

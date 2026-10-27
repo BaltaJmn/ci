@@ -47,6 +47,10 @@ on:
         description: Construye y comprueba la firma; Play solo valida la edicion y la tira, sin subir nada.
         type: boolean
         default: false
+      artefacto:
+        description: Nombre con el que guardar el .aab firmado en la ejecucion (el tren lo sube el lunes). Vacio, no se guarda.
+        type: string
+        default: ''
     secrets:
       KEYSTORE_BASE64:
         required: true
@@ -155,6 +159,16 @@ jobs:
       # La subida no la necesita: fuera antes de seguir.
       - name: Borrar la clave
         run: rm -f upload.jks keystore.properties
+
+      # El paquete firmado no lleva secretos: es lo mismo que Play reparte.
+      - if: inputs.artefacto != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artefacto }}
+          path: ${{ inputs.aab-path }}
+          retention-days: 21
+          if-no-files-found: error
+          overwrite: true
 
       # Con play.py y no con una accion de terceros: confirma la edicion con
       # ERROR_IF_IN_REVIEW. Lo que hace Play por defecto es cancelar la revision en

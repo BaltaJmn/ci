@@ -205,58 +205,54 @@ RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la
 
 ## 7. El tren de los lunes (todas las apps; hoy FlowTime y Chroma, desde el 26-10-2026)
 
-Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance. Lo decidió el usuario
-el 22-10-2026 porque se enviaban versiones encima de otras aún en revisión y cada una reiniciaba la
-revisión de la anterior. `tren.yml` de cada app (igual en todas salvo `with:`) llama a
+Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance ni tenga que tocar nada
+(el usuario, 22 y 27-10-2026). `tren.yml` de cada app (igual en todas salvo `with:`) llama a
 `.github/workflows/tren.yml` de este repositorio, y la lógica vive en `tienda/tren.py`.
 
-**El reloj es el GK35** (desde el 26-10-2026). Su crontab, en hora de Madrid (el cambio de hora lo
-pone el sistema), lanza cada paso de cada app de `APPS` de `TikTok/versiones.mjs` con `node
-versiones.mjs tren <paso> [hora de la reserva]`, que hace `gh workflow run tren.yml -R BaltaJmn/<repo>
--f paso=<paso> -f seco=false` con la sesión de `gh` del GK35. Los `schedule` de `tren.yml` de cada
-app, a las mismas horas (`timezone: Europe/Madrid`, minutos raros), quedan de respaldo: el 25 y el
-26-10 GitHub los arrancó con 1,5 a 6 h de retraso, el lunes ya no había lectura reciente de Play y
-Chroma 1.3.0 no salió. Si `gh` falla dos veces, el GK35 avisa con el error y la orden para lanzarlo a
-mano (en silencio si aún queda la reserva). Una app nueva en el tren: su línea en `APPS` (repo y
-*Resumen de publicación* de Play), que sirve a la vez para leer Play y para lanzarla.
+**El reloj es el GK35.** Su crontab (`gk/servidor/crontab`, hora de Madrid) lanza cada paso de cada
+app de `APPS` de `gk/control/versiones.mjs` con `node versiones.mjs tren <paso> [hora de la reserva]`
+(`gh workflow run tren.yml -R BaltaJmn/<repo> -f paso=<paso> -f seco=false`, con la sesión de `gh` del
+GK35), y cada 30 min `node versiones.mjs reintento` relanza el lunes mientras el último `tren-lunes`
+de esa app diga que una tienda espera, y el domingo si le falta su build. Los `schedule` de `tren.yml`
+de cada app, a las mismas horas, quedan de respaldo: el 25 y el 26-10 GitHub los arrancó con 1,5 a 6 h
+de retraso. Una app nueva en el tren: su línea en `APPS` (repo y *Resumen de publicación* de Play).
 
 | Cuándo | Qué hace |
 |---|---|
-| Domingo 19:37 | Si hay cambios en main desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`), sube la minor y el `versionCode`, deja el commit `tren: <App> X.Y.0 (N)` y la etiqueta `vX.Y.0`, y llama a `android-play-release.yml` (canal `alpha`) y a `ios-testflight-release.yml` con `ref` de esa etiqueta: lo que empuja `GITHUB_TOKEN` no dispara otros workflows. Al acabar, ntfy "Mañana sale <App> X.Y.0" con las novedades, qué tienda sale y cuál no y por qué, y el botón "Parar esta semana" |
-| Domingo 21:37 | Reserva: lo que el de las 19:37 dejó sin hacer (no corrió, se cortó, falló una subida, Play sin leer). Con la versión ya hecha hace menos de 6 h no hace otra: sube lo que falte y vuelve a avisar solo si sube algo o el primero dijo que se reintentaba |
-| Lunes 1:17 y 4:17 | Eco: vuelve a publicar las órdenes de parar y el `tren-plan` del domingo. ntfy.sh guarda 12 h, y una pulsada el domingo a las 20:00 ya no estaría a las 9:00 |
-| Lunes 9:07 | Si no hay orden de parar para esa versión, por tienda: Play, la release de `alpha` a producción al 100 % con sus notas (`play.py promover`, sin recompilar); App Store, `nueva` (publicación al aprobarse), ficha, capturas de iPhone si cambiaron desde la versión que tiene la tienda, novedades, notas y contacto de revisión, build y `enviar` (reviewSubmissions; si hay un borrador de envío, por ejemplo con In-App Events, va en él). ntfy con lo que salió y lo que no |
-| Lunes 11:07 | Reserva: repite el lunes; lo ya hecho sale como "ya" (Play con esa versión en producción, Apple con esa build enviada) y no avisa de nuevo |
+| Domingo 19:37 | Si hay cambios en main desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`), sube la minor y el `versionCode`, deja el commit `tren: <App> X.Y.0 (N)` y la etiqueta `vX.Y.0`, y llama a `android-play-release.yml` y a `ios-testflight-release.yml` con `ref` de esa etiqueta (lo que empuja `GITHUB_TOKEN` no dispara otros workflows). Play solo valida el paquete, que queda como artefacto `aab-vX.Y.0` de la ejecución (21 días): subirlo el domingo chocaría con cualquier revisión en curso. Al acabar, ntfy "<App> X.Y.0 sale el lunes" con el botón "Parar esta semana" |
+| Domingo 21:37 | Reserva. Con la versión de esta semana ya hecha (desde el domingo 19:00) no hace otra: construye lo que falte. Fuera del domingo desde las 19:00 el paso nunca numera |
+| Lunes 1:17 y 4:17 | Eco: vuelve a publicar las órdenes de parar y el `tren-plan`. ntfy.sh guarda 12 h |
+| Lunes 9:07 | Si no hay orden de parar: primero mira el iPhone por la API (versiones y envíos a revisión), luego sube el paquete del domingo a producción al 100 % con sus notas (`play.py aab`, `ERROR_IF_IN_REVIEW`) y solo si Play lo acepta manda el iPhone: `nueva` (publicación al aprobarse), ficha, capturas si cambiaron, novedades, notas, build y `enviar` |
+| Lunes 11:07 y cada 30 min | Mientras una tienda espera, el GK35 lo relanza (`:22` y `:52`); lo hecho sale "ya" y no se repite. Nunca del domingo 19:00 al lunes 9:07, el plazo del botón |
 
-**Las dos tiendas o ninguna** (el usuario, 23-10-2026: Android y iPhone llevan siempre la misma
-versión). Si una tienda tiene la versión anterior en revisión, rechazada o sin publicar, se salta la
-semana y la otra la espera; el aviso dice por qué y qué hacer. Lo decide el domingo, lo vuelve a mirar
-el lunes antes de sacar nada (`juntas()`), y si Play falla al promocionar, el iPhone tampoco sale.
-Solo si una tienda va por detrás (la otra ya tiene esa versión) sale sola, para alcanzarla. Sin salida
-no se gasta número. Si Apple aprueba la anterior entre el domingo y el lunes, se pierde esa semana: el
-domingo no subió nada.
+**Las dos tiendas o ninguna** (el usuario, 23-10-2026). Por tienda, el lunes deja uno de estos estados
+en `tren-lunes`: `ya`, `sale`, `espera` (se arregla solo: una revisión de Google o de Apple, otro envío
+de Apple como una prueba de página de producto o un evento, un 409, una versión aprobada sin publicar),
+`pareja` (espera a la otra tienda), `usuario` (solo lo arregla el usuario: un rechazo, cambios de Play
+sin enviar), `fallo` (un error), `subir` (falta la build del domingo: el GK35 relanza el domingo) y
+`parada`. Si el iPhone no puede, Play no se toca. Si Play no entra, el iPhone espera. Si el iPhone falla
+después de salir Play (el 409 del 27-10), reintenta solo hasta alcanzarla. Todo menos `ya`, `sale` y
+`parada` se reintenta cada 30 min hasta que sale, también lo del usuario, que en cuanto lo arregla sale
+solo. El domingo solo se para por lo que es del usuario: sin salida posible no gasta número.
 
-**Cualquier app nueva entra en el tren** desde su primera versión publicada en las dos tiendas, con el
-mismo `tren.yml` (decisión del usuario, 23-10-2026). Una
-versión parada o que no salió en una tienda se vuelve a anunciar el domingo siguiente si no hay nada
-nuevo; si lo hay, sale la siguiente minor.
+**Play no necesita leer la web.** La API no dice si algo está en revisión, pero el commit con
+`ERROR_IF_IN_REVIEW` falla con `CHANGES_ALREADY_IN_REVIEW` mientras Google revisa cualquier cosa, nunca
+cancela una revisión, y el tren reintenta. La lectura del GK35 de *Resumen de publicación*
+(`versiones.mjs play`, `tren-play` en el topic) es opcional: si tiene menos de 3 h, añade lo que la API
+no da, un rechazo o cambios sin enviar. Sin sesión de Play en el GK35, el tren sigue igual y llega un
+aviso para renovarla.
 
-- **App Store**: el estado de cada versión, por la API. Bloquea todo lo que no sea a la venta,
-  reemplazada, retirada o en preparación sin enviar (`LIBRE_IOS` de `tren.py`).
-- **Play**: la API no dice si algo está en revisión (producción enseña la última enviada, aprobada o
-  no). Lo lee el GK35 en *Resumen de publicación* con `TikTok/versiones.mjs play` 22 min antes de
-  lanzar cada tren (domingo 19:15 y 21:15, cada día 8:45 y el lunes también 10:45; si falla, otra
-  lectura al minuto; navegador de solo lectura) y lo publica en el topic secreto como `tren-play <paquete>
-  <json>`. Sin lectura de menos de 3 h, Play se salta la semana: una lectura vieja que dijera "solo la
-  `alpha` del tren en revisión" dejaría al lunes cancelar una revisión que entró después. Con el GK35
-  lanzando el tren, la lectura tiene minutos; solo un respaldo tardío de GitHub la ve vieja, y para
-  entonces el tren ya salió o ya dijo por qué no. El lunes, si lo único en revisión es
-  la `alpha` del propio tren, se promociona igual (cancela esa revisión y la reenvía con producción);
-  en cualquier otro caso, `ERROR_IF_IN_REVIEW` es la red: Play no pisa nada aunque la lectura falle.
+**Fichas y pruebas a revisión de martes a jueves** (temporadas, experimentos, eventos, pruebas de
+página de producto): el tren sale el lunes, y Apple no acepta su envío con otro abierto. Si coinciden,
+no pasa nada: el tren espera a que acabe y sale.
 
-**Cambios de ficha en Play** (temporadas, experimentos): de martes a jueves. Una ficha en revisión el
-domingo deja a Play fuera del tren esa semana, y el lunes, con la versión del tren en revisión, la
-subida de la ficha falla con `CHANGES_ALREADY_IN_REVIEW` hasta que Google la apruebe.
+**Avisos: dos líneas, solo si hay que hacer algo** (el usuario, 27-10-2026). Título con app, versión y
+qué pasa; cuerpo "Causa: ..." y "Haz: ...". Cada estado se dice una vez (`seguir` de `tren.py`):
+`usuario` al momento, `fallo` y `subir` a las 2 h, `espera` a las 72 h, con prioridad 3. Lo que sale
+llega en silencio (prioridad 2) y una espera no dice nada. El domingo, el aviso del botón (prioridad 2,
+"Play y iPhone, lunes 9:07") o, si algo del usuario frena la semana, por qué. Un rechazo de Apple o de
+Google lo dice también `versiones.mjs`, una vez, en cuanto lo ve. Prioridad 4 solo si hay que actuar
+hoy: un paso que se corta en la reserva del domingo o que el GK35 no pueda lanzar el tren.
 
 **Números.** El mismo `versionName` y `versionCode` en las dos tiendas (el fichero de versión de
 Android). Cada tren sube la minor (`2.5.0` a `2.6.0`), y el `versionCode` es el mayor usado en
@@ -274,51 +270,32 @@ solo con el sí del usuario: commit con la versión, etiqueta `vX.Y.Z` (que sí 
 
 **Novedades.** `store/whatsnew` de cada repo, en todos sus idiomas, valen para las dos tiendas. Quien
 cambia algo visible las reescribe en el mismo commit. Por tienda: si no cambiaron desde la versión que
-esa tienda tiene, salen las genéricas de `store/whatsnew-generic` ("Arreglos y mejoras") y el aviso
-del domingo lo dice. Las de Play se fijan al subir a `alpha` el domingo; las de Apple salen de la
-etiqueta, no de main.
+esa tienda tiene, salen las genéricas de `store/whatsnew-generic` ("Arreglos y mejoras"). Las dos
+salen de la etiqueta, no de main.
 
 **Deshacer un "Parar esta semana"** (antes del lunes a las 9:07): borrar en ntfy cada mensaje
 `parar tren <clave> <versión>` (`DELETE https://ntfy.sh/<topic>/<id>`; el id sale al leer el topic). `tren.py` descarta
 los mensajes borrados (ntfy los sigue dando con un evento `message_delete` aparte), así que ni el eco los repite ni el
-lunes los ve.
+lunes los ve. Una orden de parar deja `parada` en `tren-lunes` y el GK35 ya no reintenta esa versión.
 
-**El topic secreto** (`ntfy-topic-aprobar`, el de los botones de `TikTok/lote.mjs`, que ignora estas
-líneas) lleva: `parar tren <clave> <versión>` (el botón), `tren-play <paquete> <json>` (GK35),
-`tren-plan <clave> <json>` y `tren-lunes <clave> <json>` (el tren, para la tabla *Versiones* de
-semana.baltajmn.dev, que pinta `versiones.mjs`). Secretos `NTFY_TOPIC` y `NTFY_TOPIC_APROBAR` en cada
-repo (`~/keys/LEEME.md`).
+**El topic secreto** (`ntfy-topic-aprobar`, el de los botones de `gk/control/lote.mjs`, que ignora
+estas líneas) lleva: `parar tren <clave> <versión>` (el botón), `tren-play <paquete> <json>` (GK35),
+`tren-plan <clave> <json>`, `tren-lunes <clave> <json>` (estado por tienda, desde cuándo y qué se dijo;
+lo lee el reintento del GK35 y la tabla *Versiones* de semana.baltajmn.dev) y `tren-fallo <clave>
+<paso>` (un paso cortado ya avisado: uno cada 12 h). Secretos `NTFY_TOPIC` y `NTFY_TOPIC_APROBAR` en
+cada repo (`~/keys/LEEME.md`).
 
 **En seco** (`gh workflow run tren.yml -f paso=domingo|eco|lunes`, `seco` marcado por defecto): la
-versión nueva va a la rama `tren-seco` (se borra al acabar), Play solo valida la edición, el archive
-de iOS se exporta sin subir, nada cambia en App Store Connect, los avisos dicen PRUEBA y el botón
-publica `parar prueba ...`, que el tren de verdad no lee. Ni etiqueta ni mensajes para semana.
+versión nueva va a la rama `tren-seco` (se borra al acabar) y su paquete al artefacto `aab-tren-seco`,
+que el lunes en seco valida en Play; el archive de iOS se exporta sin subir, nada cambia en App Store
+Connect, los avisos dicen PRUEBA y el botón publica `parar prueba ...`, que el tren de verdad no lee.
+Ni etiqueta ni mensajes para semana.
 
-**Avisos: suenan solo los rechazos y los fallos** (decisión del usuario, 22-10-2026: "que nos
-enteremos si hay un error y listo"). Suena (prioridad 4), con por qué y qué hacer: un rechazo de Apple
-o de Google, un Play que el GK35 no consigue leer, una subida que falló o un paso que se cortó, en los
-dos últimos casos solo si la reserva tampoco lo arregla (`grave` de `tren.py`). Todo lo demás llega
-en silencio (ntfy prioridad 2) y queda en la tabla *Versiones*: lo que sale, y una tienda que se salta
-la semana porque la anterior sigue en revisión o pendiente de publicar, donde no hay nada que hacer.
-El aviso del domingo con el botón también es silencioso salvo un rechazo o un fallo: sin mirarlo,
-sale igual. El lunes no vuelve a sonar por lo que el domingo ya dijo que no salía, y el de reserva no
-repite lo que dijo el de las 9:07.
+**Reintentos dentro de cada paso.** `play.py` y `appstore.py` reintentan dos veces los 5xx (y Apple, el
+409 `STATE_ERROR`); la subida a TestFlight, dos veces sin recompilar; ntfy, dos veces; `gh workflow
+run` en el GK35, una vez a los 30 s.
 
-**Reintentos antes de avisar.** `play.py` y `appstore.py` reintentan dos veces los 5xx (y Apple, el
-409 `STATE_ERROR`); la subida a TestFlight, dos veces sin recompilar; ntfy, dos veces. Lo que aun así
-falla antes de la reserva de un paso (o un Play sin leer) avisa en silencio "se reintenta sola a las
-21:37 / 11:07", y solo suena si la reserva tampoco lo arregla. `tren.py` sabe si aún queda reserva por
-el reloj de Madrid (`RESERVA`), la arranque quien la arranque: el GK35, el respaldo de GitHub o una
-persona. `RESERVA` y el crontab del GK35 van juntos.
-
-**Un disparo doble no cambia nada.** El GK35 y el respaldo de GitHub lanzan cada paso, y
-`concurrency: tren` los pone en fila. El segundo domingo, con la versión hecha hace menos de 6 h, no
-hace otra: sube solo lo que falte y avisa solo si sube algo o el primero dijo que se reintentaba. Un
-domingo programado que GitHub arranca ya en lunes no hace nada (con un push del lunes haría otra
-versión encima de la que sale). El segundo lunes ve "ya" en cada tienda (Play con esa versión en
-producción, Apple con esa build enviada) o el mismo motivo de antes, y no vuelve a avisar. El eco
-repite las órdenes de parar, que no pasa nada por tenerlas dos veces.
-
-**Si algo falla** en la reserva, el aviso lo dice con el paso y la orden para relanzarlo: `gh workflow
-run tren.yml -R BaltaJmn/<repo> -f paso=<paso> -f seco=false`. GitHub también manda un correo por cada
-ejecución fallida.
+**Un disparo doble no cambia nada.** El GK35, su reintento y el respaldo de GitHub lanzan los pasos, y
+`concurrency: tren` los pone en fila (el reintento no lanza con otro tren de esa app en marcha). El
+segundo domingo no numera, el segundo lunes ve "ya" o el mismo estado y no vuelve a avisar, y el eco
+repite órdenes de parar, que no pasa nada por tenerlas dos veces.
