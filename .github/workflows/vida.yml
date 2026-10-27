@@ -1,0 +1,29 @@
+name: Vida del GK35
+# Cada 2 h mira el latido del GK35 (gk/servidor/vida.sh: un "vivo" por hora al topic NTFY_VIDA) y, si lleva 3 h sin latir
+# (apagon, cuelgue o sin red), avisa en NTFY_TOPIC. Uno por caida: deja "caido" en el topic del latido y no repite hasta que
+# ntfy.sh lo olvida (12 h). Aqui y no en gk porque en este repo publico las Actions no cuestan.
+on:
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+jobs:
+  vida:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          VIDA: ${{ secrets.NTFY_VIDA }}
+          AVISOS: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          [ -n "$VIDA" ] && [ -n "$AVISOS" ] || { echo "faltan los secretos NTFY_VIDA y NTFY_TOPIC"; exit 0; }
+          m=$(curl -fsS -m 30 "https://ntfy.sh/$VIDA/json?poll=1&since=12h") || { echo "ntfy no responde: no se sabe"; exit 0; }
+          ultima() { echo "$m" | jq -s --arg t "$1" '[.[] | select(.event == "message" and .message == $t) | .time] | max // 0'; }
+          vivo=$(ultima vivo); caido=$(ultima caido); h=$(( ($(date +%s) - vivo) / 3600 ))
+          echo "ultimo latido hace $h h"
+          [ "$h" -ge 3 ] && [ "$caido" -le "$vivo" ] || exit 0
+          desde=$([ "$vivo" -gt 0 ] && TZ=Europe/Madrid date -d "@$vivo" +%H:%M || echo "hace mas de 12 h")
+          curl -fsS -m 30 -d caido "https://ntfy.sh/$VIDA" > /dev/null
+          jq -n --arg t "$AVISOS" --arg d "$desde" '{topic: $t, title: "GK35 sin señal desde \($d)", priority: 4, tags: ["rotating_light"],
+            message: "Causa: no late (apagón, cuelgue o sin red): no corre nada.\nHaz: mira que esté encendido y con red; si no responde, reinícialo."}' |
+            curl -fsS -m 30 -d @- https://ntfy.sh/ > /dev/null
+          echo "avisado"
