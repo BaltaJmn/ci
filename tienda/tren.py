@@ -217,8 +217,10 @@ def orden(clave, nombre):
     return f"parar {'prueba' if SECO else 'tren'} {clave} {nombre}"
 
 
-def parada(msgs, clave, nombre):
-    return any((m.get("message") or "").strip() == orden(clave, nombre) for m in msgs)
+def parada(msgs, clave, nombre, hasta=None):
+    """A stop order, only if pressed before `hasta` (Monday 9:07): a later press does nothing, so a store
+    still waiting after 9:07 is not left behind the one that already went out."""
+    return any((m.get("message") or "").strip() == orden(clave, nombre) and (hasta is None or m.get("time", 0) < hasta) for m in msgs)
 
 
 def estado_play(msgs, paquete):
@@ -537,7 +539,8 @@ def lunes(repo):
     plan = None if SECO else del_tren(msgs, "plan", clave, nombre)
     # Dry, the stop order to look for is the one of the dry Sunday notice: the version it would have made
     anunciada = subir_minor((pathlib.Path(repo) / env("VERSION_FILE")).read_text(encoding="utf-8"))[1] if SECO else nombre
-    if parada(msgs, clave, anunciada):
+    hasta = None if SECO else (semana(datetime.datetime.now(MADRID)) + datetime.timedelta(hours=14, minutes=7)).timestamp()
+    if parada(msgs, clave, anunciada, hasta):
         if (prev or {}).get("play") != "parada":
             avisar(f"{app} {anunciada} parada esta semana", "pulsaste Parar", "nada; el domingo sale lo que haya en main", 2)
         if not SECO:
@@ -603,6 +606,11 @@ def prueba():
     ev = [{"event": "message", "id": "a", "message": "parar tren chroma 1.3.0"}, {"event": "message_delete", "id": "b", "sequence_id": "a"},
           {"event": "message", "id": "c", "message": "parar tren chroma 1.3.0"}]
     assert parada(vivos(ev), "chroma", "1.3.0") and not parada(vivos(ev[:2]), "chroma", "1.3.0")  # a deleted stop no longer stops
+    corte = (semana(m(26, 10, 0)) + datetime.timedelta(hours=14, minutes=7)).timestamp()
+    assert corte == m(26, 9, 7).timestamp()
+    tarde = [{"message": "parar tren chroma 1.3.0", "time": m(26, 9, 30).timestamp()}]
+    assert parada(tarde, "chroma", "1.3.0") and not parada(tarde, "chroma", "1.3.0", corte)  # pressed after 9:07: nothing
+    assert parada([{**tarde[0], "time": m(25, 20, 0).timestamp()}], "chroma", "1.3.0", corte)
     # Play: only a fresh reading says anything, and only what the user has to clear
     ahora = m(26, 9, 7).timestamp()
     est = lambda e, h=0.3: {"leido": datetime.datetime.fromtimestamp(ahora - h * 3600, datetime.timezone.utc).isoformat(), "estado": e, "url": "U"}

@@ -277,6 +277,8 @@ salen de la etiqueta, no de main.
 `parar tren <clave> <versión>` (`DELETE https://ntfy.sh/<topic>/<id>`; el id sale al leer el topic). `tren.py` descarta
 los mensajes borrados (ntfy los sigue dando con un evento `message_delete` aparte), así que ni el eco los repite ni el
 lunes los ve. Una orden de parar deja `parada` en `tren-lunes` y el GK35 ya no reintenta esa versión.
+Un "Parar" pulsado después del lunes a las 9:07 no hace nada (27-10-2026): si no, una tienda que aún
+espera se quedaría atrás de la que ya salió.
 
 **El topic secreto** (`ntfy-topic-aprobar`, el de los botones de `gk/control/lote.mjs`, que ignora
 estas líneas) lleva: `parar tren <clave> <versión>` (el botón), `tren-play <paquete> <json>` (GK35),
