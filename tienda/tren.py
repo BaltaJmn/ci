@@ -56,9 +56,10 @@ LIBRE_IOS = {"READY_FOR_SALE", "READY_FOR_DISTRIBUTION", "REPLACED_WITH_NEW_VERS
              "DEVELOPER_REMOVED_FROM_SALE", "PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED"}
 SIN_ENVIAR = {"PREPARE_FOR_SUBMISSION", "DEVELOPER_REJECTED"}  # prepared but never sent: reused
 RECHAZO_IOS = {"REJECTED", "METADATA_REJECTED", "INVALID_BINARY"}
-# App Review submissions (a version, a product page test, events) that are in Apple's hands: Apple takes
-# no other one meanwhile (409 ENTITY_STATE_INVALID, 27-10-2026). UNRESOLVED_ISSUES is a rejection.
-ENVIO_ABIERTO = {"WAITING_FOR_REVIEW", "IN_REVIEW", "CANCELING", "COMPLETING"}
+# App Review submissions (a version, a product page test, events) that keep Apple from taking another: on
+# 27-10-2026 a product page test WAITING_FOR_REVIEW gave 409 ENTITY_STATE_INVALID, and the same test
+# IN_REVIEW let Chroma 1.3.0 in at 13:21. A 409 anyway is retried (error_ios). UNRESOLVED_ISSUES is a rejection.
+ENVIO_ABIERTO = {"WAITING_FOR_REVIEW"}
 
 
 def env(n, por=None):
@@ -614,7 +615,7 @@ def prueba():
     # iPhone: another submission in review (a product page test, 27-10) waits; a rejection is the user's
     libre = [("1.2.4", "READY_FOR_SALE", 25)]
     assert bloqueo_ios(libre, [], "E") is None
-    assert bloqueo_ios(libre, ["WAITING_FOR_REVIEW"], "E")[0] == "espera"
+    assert bloqueo_ios(libre, ["WAITING_FOR_REVIEW"], "E")[0] == "espera" and bloqueo_ios(libre, ["IN_REVIEW"], "E") is None
     assert bloqueo_ios(libre, ["UNRESOLVED_ISSUES", "WAITING_FOR_REVIEW"], "E")[0] == "usuario"
     assert bloqueo_ios([("1.3.0", "WAITING_FOR_REVIEW", 26)] + libre, [], "E")[1] == "Apple revisa la 1.3.0"
     assert bloqueo_ios([("1.3.0", "REJECTED", 26)] + libre, ["WAITING_FOR_REVIEW"], "E")[0] == "usuario"
