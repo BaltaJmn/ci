@@ -123,6 +123,12 @@ ficha de Play con `~/keys/play.sh ficha` en local, hasta que se arregle la factu
 o pase a público. Ojo: los workflows de fichas también se paran, y en silencio: en Play, FlowTime se
 quedó en 6 idiomas de 14 y MoodTraker en 5 de 13 (subidas todas el 05-10-2026).
 
+**Privados, a mano (27-10-2026).** MoodTraker, Quilt (`quilt`, privado otra vez) y Sleeper se
+construyen y publican en local: `bundleRelease` + `~/keys/play.sh aab`, `~/keys/testflight.sh` y
+`appstore.py`. Ni el repo público intermedio ni abrir el repo mientras corre: los registros y
+artefactos quedarían públicos y es saltarse la facturación. Sus workflows solo tienen
+`workflow_dispatch`: ningún push ni etiqueta dispara nada, y no entran en el tren (sección 7).
+
 **App Groups.** Solo existía el de Chroma, y FlowTime, Quilt y MoodTraker no firmaban para la App
 Store por eso. Es el paso 8 de la sección 4.
 
