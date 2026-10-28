@@ -37,9 +37,11 @@ ASC_LOCALES = {"ar-SA", "ca", "cs", "da", "de-DE", "el", "en-AU", "en-CA", "en-G
 
 
 def asc_locale(folder):
-    # zh-TW (the Play name, which the contract makes every store use) is Traditional Chinese in Apple
-    if folder == "zh-TW":
-        return "zh-Hant"
+    # Play names, which the contract makes every store use: zh-TW is Traditional Chinese in Apple, and
+    # es-419 (Latin American Spanish) is es-MX, which Apple also indexes in the US store
+    special = {"zh-TW": "zh-Hant", "es-419": "es-MX"}
+    if folder in special:
+        return special[folder]
     return folder if folder in ASC_LOCALES else folder.split("-")[0]
 
 

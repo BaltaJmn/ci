@@ -41,7 +41,9 @@ store/events/<evento>/{event.json,card.png,details.png}                opcional,
 ```
 
 - **Los mismos idiomas en las dos fichas y en las notas**, con la región siempre (`it-IT`, no `it`):
-  `appstore.py` la quita donde Apple no la usa (y `zh-TW` lo sube como `zh-Hant`). Son los idiomas de
+  `appstore.py` la quita donde Apple no la usa (y `zh-TW` lo sube como `zh-Hant` y `es-419` como `es-MX`,
+  que Apple indexa tambien en la tienda de EE. UU.: FlowTime y Chroma la llevan desde el 28-10-2026, con
+  nombre, textos, notas y capturas enlazados a `es-ES` y subtitulo y claves propios). Son los idiomas de
   la interfaz: trece en todas, y FlowTime además hindi. Excepción: FlowTime, Chroma y Quilt llevan
   también `vi` y `zh-TW` solo en las fichas, con la app en inglés y la ficha diciéndolo (26-10-2026:
   los videos del canal de las apps salen traducidos a esos dos idiomas, ver traducir-apps.mjs de Bots).

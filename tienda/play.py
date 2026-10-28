@@ -190,6 +190,9 @@ def aab(package, path, track, notes, status="completed", dry=False):
         vc = call("POST", f"{e.up}/edits/{e.id}/bundles?uploadType=media", data=pathlib.Path(path).read_bytes(),
                   ctype="application/octet-stream")["versionCode"]
         print(f"  AAB subido: versionCode {vc}")
+        # A locale added to store/ reaches the notes before its listing is uploaded (that one waits for a yes)
+        listed = {l["language"] for l in call("GET", f"{e.url}/listings").get("listings", [])}
+        notes = [n for n in notes if n["language"] in listed]
         call("PUT", f"{e.url}/tracks/{track}", {"track": track, "releases": [
             {"versionCodes": [str(vc)], "status": status, "releaseNotes": notes}]})
         print(f"  canal {track}, {status}, notas en {len(notes)} idiomas")
