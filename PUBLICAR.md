@@ -21,7 +21,12 @@ copian están en `~/keys/LEEME.md`, fuera de cualquier repositorio.
 - Un `versionCode` no se reutiliza nunca: Play y App Store Connect rechazan un build repetido.
 - Sin Actions, lo mismo desde el Mac: `~/keys/play.sh aab` y `~/keys/testflight.sh`, que son
   `tienda/play.py` y `tienda/testflight.sh` de este repositorio.
-- La ficha va aparte, en `listings.yml`: cada push a `store/` la comprueba (`tienda/comprobar.py`), y a
+- La ficha sale con la versión que la respalda, en el mismo envío: en iPhone siempre fue así, y en Play
+  desde el 29-10-2026 la edición que pasa la versión a producción lleva también los textos de la ficha
+  (`play.py aab` o `promover` con `ficha_de`; el tren sube las imágenes solo si cambiaron). Google
+  revisa las dos cosas juntas: nada espera a que acabe otra revisión. Nunca con una pista de prueba: la
+  ficha es una para todas y vendería lo que producción aún no tiene. Para cambiar solo la ficha
+  (palabras clave), `listings.yml`: cada push a `store/` la comprueba (`tienda/comprobar.py`), y a
   mano (`gh workflow run listings.yml -f target=play|app-store|both`) la sube. Qué tiene que haber en
   `store/`: README, *El contrato de cada app*.
 
@@ -232,7 +237,7 @@ reintenta cada 3 h y no cada 30 min.
 | Domingo 19:37 | Si hay cambios en main desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`), sube la minor y el `versionCode`, deja el commit `tren: <App> X.Y.0 (N)` y la etiqueta `vX.Y.0`, y llama a `android-play-release.yml` y a `ios-testflight-release.yml` con `ref` de esa etiqueta (lo que empuja `GITHUB_TOKEN` no dispara otros workflows). Play solo valida el paquete, que queda como artefacto `aab-vX.Y.0` de la ejecución (21 días): subirlo el domingo chocaría con cualquier revisión en curso. Al acabar, ntfy "<App> X.Y.0 sale el lunes" con el botón "Parar esta semana" |
 | Domingo 21:37 | Reserva. Con la versión de esta semana ya hecha (desde el domingo 19:00) no hace otra: construye lo que falte. Fuera del domingo desde las 19:00 el paso nunca numera |
 | Lunes 1:17 y 4:17 | Eco: vuelve a publicar las órdenes de parar y el `tren-plan`. ntfy.sh guarda 12 h. Desde el 27-10 lo corre el GK35 con `tienda/tren.py eco`, sin Actions |
-| Lunes 9:07 | Si no hay orden de parar: primero mira el iPhone por la API (versiones y envíos a revisión), luego sube el paquete del domingo a producción al 100 % con sus notas (`play.py aab`, `ERROR_IF_IN_REVIEW`) y solo si Play lo acepta manda el iPhone: `nueva` (publicación al aprobarse), ficha, capturas si cambiaron, novedades, notas, build y `enviar` |
+| Lunes 9:07 | Si no hay orden de parar: primero mira el iPhone por la API (versiones y envíos a revisión), luego sube el paquete del domingo a producción al 100 % con sus notas y la ficha en la misma edición, imágenes solo si cambiaron desde la versión de producción (`play.py aab`, `ERROR_IF_IN_REVIEW`) y solo si Play lo acepta manda el iPhone: `nueva` (publicación al aprobarse), ficha, capturas si cambiaron, novedades, notas, build y `enviar` |
 | Lunes 11:07 y cada 30 min | Mientras una tienda espera, el GK35 lo relanza (`:22` y `:52`); lo hecho sale "ya" y no se repite. Nunca del domingo 19:00 al lunes 9:07, el plazo del botón |
 
 **Las dos tiendas o ninguna** (el usuario, 23-10-2026). Por tienda, el lunes deja uno de estos estados
@@ -253,7 +258,7 @@ no da, un rechazo o cambios sin enviar. Sin sesión de Play en el GK35, el tren 
 aviso para renovarla.
 
 **Fichas y pruebas a revisión de martes a jueves** (temporadas, experimentos, eventos, pruebas de
-página de producto): el tren sale el lunes, y Apple no acepta su envío con otro abierto. Si coinciden,
+página de producto), salvo la ficha que va con la versión del lunes: el tren sale el lunes, y Apple no acepta su envío con otro abierto. Si coinciden,
 no pasa nada: el tren espera a que acabe y sale.
 
 **Avisos: dos líneas, solo si hay que hacer algo** (el usuario, 27-10-2026). Título con app, versión y

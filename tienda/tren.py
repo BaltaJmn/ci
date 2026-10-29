@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import appstore, play  # noqa: E402
 
 NOTAS, GENERICAS = "store/whatsnew", "store/whatsnew-generic"
+IMAGENES_PLAY = ("store/play", "store/screenshots/play", "store/screenshots/tablet")
 # A week with only these changes makes no version: documentation, workflows and IDE files.
 FUERA = [":(exclude)*.md", ":(exclude).github", ":(exclude).idea"]
 FRESCO = 3 * 3600  # a Play Console reading older than this tells nothing
@@ -121,8 +122,8 @@ def etiqueta_de(repo, code):
     return None
 
 
-def cambia(repo, desde, hasta, ruta):
-    return bool(git(repo, "diff", "--name-only", desde, hasta, "--", ruta))
+def cambia(repo, desde, hasta, *rutas):
+    return bool(git(repo, "diff", "--name-only", desde, hasta, "--", *rutas))
 
 
 def notas_para(repo, desde_code, hasta):
@@ -340,11 +341,14 @@ def aab_guardado(ref):
     return next((a["id"] for a in gh(f"actions/artifacts?name=aab-{ref}&per_page=20")["artifacts"] if not a["expired"]), None)
 
 
-def subir_play(repo, paquete, art, carpeta, dry):
-    """Sunday's bundle to production at 100 %, with its notes; the commit never cancels a review (play.py)."""
+def subir_play(repo, paquete, art, carpeta, base, dry):
+    """Sunday's bundle to production at 100 %, with its notes and the listing in the same edit (play.py);
+    images only if they changed since `base`, the tag production has. The commit never cancels a review."""
+    imagenes = not base or cambia(repo, base, "HEAD", *IMAGENES_PLAY)
     with tempfile.TemporaryDirectory() as d:
         zipfile.ZipFile(io.BytesIO(gh(f"actions/artifacts/{art}/zip", crudo=True))).extractall(d)
-        play.aab(paquete, str(next(pathlib.Path(d).rglob("*.aab"))), "production", os.path.join(repo, carpeta), dry=dry)
+        play.aab(paquete, str(next(pathlib.Path(d).rglob("*.aab"))), "production", os.path.join(repo, carpeta), dry=dry,
+                 ficha_de=repo, imagenes=imagenes)
 
 
 def salida(**kv):
@@ -486,7 +490,7 @@ def intentar(repo, paquete, bundle, nombre, code, tag, msgs, ahora):
             None: ("subir", f"falta la build {code} en TestFlight", CLAUDE)}.get(tf, ("usuario", f"TestFlight dio la build {code} por {tf}", CLAUDE))
     if SECO:  # nothing changes: Play validates the dry Sunday's bundle, App Store Connect is only described
         if art:
-            subir_play(repo, paquete, art, NOTAS, True)
+            subir_play(repo, paquete, art, NOTAS, etiqueta_de(repo, prod), True)
         de_verdad = lambda b: f"; de verdad: {b[0]}, {b[1]}" if b else ""
         return {"play": ("sale", ("validado el paquete del domingo en seco" if art else "sin paquete del domingo en seco") + de_verdad(p), NADA),
                 "ios": ("sale", f"en seco: se enviaria la {nombre} con la build {code}" + de_verdad(i), NADA)}
@@ -495,7 +499,7 @@ def intentar(repo, paquete, bundle, nombre, code, tag, msgs, ahora):
     res.update({k: b for k, b in (("play", p), ("ios", i)) if b and k not in res})
     if "play" not in res:
         try:
-            subir_play(repo, paquete, art, notas_para(repo, prod, tag), False)
+            subir_play(repo, paquete, art, notas_para(repo, prod, tag), etiqueta_de(repo, prod), False)
             res["play"] = ("sale", "a produccion al 100 %", NADA)
         except SystemExit as e:
             res["play"] = error_play(str(e.code), play_url(est))

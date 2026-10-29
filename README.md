@@ -135,7 +135,7 @@ Actions. Leen las credenciales del entorno en CI y del Llavero y `~/keys` en el 
 | Script | Para |
 |---|---|
 | `comprobar.py <repo>` | El contrato de `store/`: idiomas iguales, topes de cada tienda, gráficos y capturas |
-| `play.py estado\|ficha\|aab\|promover` | Play: canales y fichas; la ficha entera en una edición (`--dry` la valida y la tira); un AAB a un canal de prueba; `promover`, la `alpha` a producción (solo el tren) |
+| `play.py estado\|ficha\|aab\|promover` | Play: canales y fichas; la ficha entera en una edición (`--dry` la valida y la tira); un AAB a un canal de prueba; `promover`, la `alpha` a producción, con `<repo>` también su ficha en la misma edición |
 | `appstore.py estado\|ficha\|capturas\|...\|enviar` | App Store Connect: qué falta antes de enviar, ficha, capturas, compras, adjuntos, versión, build y `enviar` a revisión (solo el tren) |
 | `tren.py domingo\|aviso\|eco\|lunes\|--prueba` | El tren de los lunes (`PUBLICAR.md` 7); `--prueba` comprueba la lógica sin red |
 | `compra.py <paquete> <producto Play> <producto Apple> [precio]` | La compra igual en las dos tiendas: textos de Apple copiados a Play y, con precio, base en España e igualación de Apple aplicada a Play donde la moneda coincide |

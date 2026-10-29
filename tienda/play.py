@@ -9,15 +9,22 @@ Nothing secret is printed. From the Mac, production never starts here: that is t
     play.py aab      <package> <aab> <track> <notes> [draft] [--dry]   AAB to internal, alpha or beta (production
                                                               only from Actions); <notes> is a repo (its store/whatsnew)
                                                               or a folder of whatsnew-<locale> files
-    play.py promover <package> <versionCode> [--dry]          the alpha release with that code to production at 100%,
-                                                              with its notes: only the train (tren.py) does this
+    play.py promover <package> <versionCode> [<repo>] [--dry]   the alpha release with that code to production at 100%,
+                                                              with its notes and, with <repo>, its whole listing (no
+                                                              contact details): the train (tren.py) or by hand
 
 Every write goes in one edit, which is atomic: either the whole listing changes or nothing does.
 `--dry` builds the edit, has Play validate it and throws it away. A commit never cancels a review in
 progress (changesInReviewBehavior=ERROR_IF_IN_REVIEW): Play's default does, and restarts it from zero.
 It fails with CHANGES_ALREADY_IN_REVIEW instead; only promover(cancelar=True) overrides it, for the
-train's own alpha release still in review. The layout `ficha` reads is the one
-README.md of BaltaJmn/ci describes: store/listings/<locale>, store/play/icon-512.png,
+train's own alpha release still in review.
+
+The listing is one for every track, so it goes out with the production release that backs it, in the
+same edit (aab and promover with `ficha_de`): Google reviews both together and nothing waits for the
+review to end. Never with a test track: it would sell what production does not have yet. `ficha` alone
+is for a listing change without a version (keywords), when nothing is in review.
+
+The layout `ficha` reads is the one README.md of BaltaJmn/ci describes: store/listings/<locale>, store/play/icon-512.png,
 store/play/feature/<locale>.png, store/screenshots/play/<locale>/*.png and, if it exists,
 store/screenshots/tablet/<locale>/*.png. Purchases: compra.py,
 which gives a purchase the same price and texts in both stores.
@@ -145,42 +152,49 @@ def estado(package):
         call("DELETE", url)
 
 
-def ficha(package, repo, web, dry):
+def _ficha(e, repo, imagenes=True):
+    """The repo's listing into an open edit: texts and, with `imagenes`, icon, graphics and screenshots."""
     store = pathlib.Path(repo) / "store"
+    for d in _dirs(store / "listings"):
+        call("PUT", f"{e.url}/listings/{d.name}", {
+            "language": d.name, "title": _read(d / "title.txt"),
+            "shortDescription": _read(d / "short.txt"), "fullDescription": _read(d / "full.txt")})
+        print(f"  {d.name}: textos")
+    if not imagenes:
+        return
+    call("DELETE", f"{e.url}/listings/{DEFAULT_LANGUAGE}/icon")
+    e.image(DEFAULT_LANGUAGE, "icon", store / "play/icon-512.png")
+    for png in sorted((store / "play/feature").glob("*.png")):
+        call("DELETE", f"{e.url}/listings/{png.stem}/featureGraphic")
+        e.image(png.stem, "featureGraphic", png)
+        print(f"  {png.stem}: gráfico de funciones")
+    for d in _dirs(store / "screenshots/play"):
+        pngs = sorted(d.glob("*.png"))
+        if pngs:
+            call("DELETE", f"{e.url}/listings/{d.name}/phoneScreenshots")
+            for png in pngs:
+                e.image(d.name, "phoneScreenshots", png)
+            print(f"  {d.name}: {len(pngs)} capturas")
+    # Tablets (10"): the same, when the app has screenshots/tablet/<language>/.
+    for d in _dirs(store / "screenshots/tablet"):
+        pngs = sorted(d.glob("*.png"))
+        if pngs:
+            call("DELETE", f"{e.url}/listings/{d.name}/tenInchScreenshots")
+            for png in pngs:
+                e.image(d.name, "tenInchScreenshots", png)
+            print(f"  {d.name}: {len(pngs)} capturas de tablet")
+
+
+def ficha(package, repo, web, dry):
     with Edit(package, dry) as e:
-        for d in _dirs(store / "listings"):
-            call("PUT", f"{e.url}/listings/{d.name}", {
-                "language": d.name, "title": _read(d / "title.txt"),
-                "shortDescription": _read(d / "short.txt"), "fullDescription": _read(d / "full.txt")})
-            print(f"  {d.name}: textos")
+        _ficha(e, repo)
         # PUT and not PATCH: anything not listed here (a phone number) comes off the listing.
         call("PUT", e.url + "/details", {"defaultLanguage": DEFAULT_LANGUAGE,
                                         "contactEmail": CONTACT_EMAIL, "contactWebsite": web})
         print(f"  detalles: {DEFAULT_LANGUAGE}, {CONTACT_EMAIL}, {web}")
-        call("DELETE", f"{e.url}/listings/{DEFAULT_LANGUAGE}/icon")
-        e.image(DEFAULT_LANGUAGE, "icon", store / "play/icon-512.png")
-        for png in sorted((store / "play/feature").glob("*.png")):
-            call("DELETE", f"{e.url}/listings/{png.stem}/featureGraphic")
-            e.image(png.stem, "featureGraphic", png)
-            print(f"  {png.stem}: gráfico de funciones")
-        for d in _dirs(store / "screenshots/play"):
-            pngs = sorted(d.glob("*.png"))
-            if pngs:
-                call("DELETE", f"{e.url}/listings/{d.name}/phoneScreenshots")
-                for png in pngs:
-                    e.image(d.name, "phoneScreenshots", png)
-                print(f"  {d.name}: {len(pngs)} capturas")
-        # Tablets (10"): the same, when the app has screenshots/tablet/<language>/.
-        for d in _dirs(store / "screenshots/tablet"):
-            pngs = sorted(d.glob("*.png"))
-            if pngs:
-                call("DELETE", f"{e.url}/listings/{d.name}/tenInchScreenshots")
-                for png in pngs:
-                    e.image(d.name, "tenInchScreenshots", png)
-                print(f"  {d.name}: {len(pngs)} capturas de tablet")
 
 
-def aab(package, path, track, notes, status="completed", dry=False):
+def aab(package, path, track, notes, status="completed", dry=False, ficha_de=None, imagenes=False):
     if track not in ("internal", "alpha", "beta") and not (track == "production" and os.environ.get("GITHUB_ACTIONS")):
         sys.exit(f"Canal {track} no permitido: producción sale con el tren de los lunes o desde Play Console.")
     d = pathlib.Path(notes)
@@ -190,6 +204,8 @@ def aab(package, path, track, notes, status="completed", dry=False):
         vc = call("POST", f"{e.up}/edits/{e.id}/bundles?uploadType=media", data=pathlib.Path(path).read_bytes(),
                   ctype="application/octet-stream")["versionCode"]
         print(f"  AAB subido: versionCode {vc}")
+        if ficha_de:  # production only: see the header
+            _ficha(e, ficha_de, imagenes)
         # A locale added to store/ reaches the notes before its listing is uploaded (that one waits for a yes)
         listed = {l["language"] for l in call("GET", f"{e.url}/listings").get("listings", [])}
         notes = [n for n in notes if n["language"] in listed]
@@ -198,14 +214,17 @@ def aab(package, path, track, notes, status="completed", dry=False):
         print(f"  canal {track}, {status}, notas en {len(notes)} idiomas")
 
 
-def promover(package, code, cancelar=False, dry=False):
+def promover(package, code, cancelar=False, dry=False, ficha_de=None, imagenes=False):
     """The weekly train: the alpha release with versionCode `code` to production at 100%, with the same
-    notes, without rebuilding. `cancelar`: only when what is in review is that same alpha release."""
+    notes, without rebuilding. `cancelar`: only when what is in review is that same alpha release.
+    `ficha_de`: that repo's listing in the same edit (see the header)."""
     with Edit(package, dry, cancelar) as e:
         rel = next((r for r in call("GET", e.url + "/tracks/alpha").get("releases", [])
                     if str(code) in r.get("versionCodes", [])), None)
         if not rel:
             raise SystemExit(f"{code} no está en alpha: el domingo no se subió")
+        if ficha_de:
+            _ficha(e, ficha_de, imagenes)
         new = {"versionCodes": [str(code)], "status": "completed", "releaseNotes": rel.get("releaseNotes", [])}
         call("PUT", e.url + "/tracks/production", {"track": "production", "releases": [
             {**new, "name": rel["name"]} if rel.get("name") else new]})
@@ -304,7 +323,7 @@ if __name__ == "__main__":
         ficha(a[1], a[2], a[3], dry)
     elif len(a) in (5, 6) and a[0] == "aab":
         aab(a[1], a[2], a[3], a[4], "draft" if a[5:] == ["draft"] else "completed", dry)
-    elif len(a) == 3 and a[0] == "promover":
-        promover(a[1], a[2], dry=dry)
+    elif len(a) in (3, 4) and a[0] == "promover":
+        promover(a[1], a[2], dry=dry, ficha_de=a[3] if len(a) == 4 else None, imagenes=True)
     else:
         print(__doc__)
