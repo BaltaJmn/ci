@@ -235,7 +235,8 @@ plantilla de capturas y sus fuentes). Estado, paquetes y registros de cada app, 
 media build. Si el Mac dormía, launchd lanza el tick al despertar, y `pmset` lo despierta el lunes a las 7:25.
 
 Instalar, una vez (lo hace el usuario: el control de permisos de Claude bloquea `launchctl` y `sudo`). `pmset repeat`
-sustituye cualquier otro `repeat` que hubiera (`pmset -g sched` los enseña). La CLI `claude` tiene que tener sesión
+sustituye cualquier otro `repeat` que hubiera (`pmset -g sched` los enseña). Instalado un lunes desde las 7:30, el
+primer tick arranca ya la versión de ese día. La CLI `claude` tiene que tener sesión
 (`claude` y `/login`): sin ella, el escaparate no corre y la versión sale con la ficha que había.
 
 ```bash
