@@ -36,7 +36,7 @@ UPLOAD = "https://androidpublisher.googleapis.com/upload/androidpublisher/v3/app
 # The family's store contract: English is the default language in both stores, one contact address.
 DEFAULT_LANGUAGE = "en-US"
 CONTACT_EMAIL = "baltajmn@gmail.com"
-_tok = None
+_tok, _exp = None, 0
 
 
 def _b64(b):
@@ -44,8 +44,10 @@ def _b64(b):
 
 
 def _token():
-    global _tok
-    if _tok:
+    # Google's access token lasts an hour and a release-train run takes longer (2-11-2026: Quilt and MoodTraker got 401
+    # an hour in), so it is renewed a few minutes before it expires, like appstore.py's.
+    global _tok, _exp
+    if _tok and time.time() < _exp - 300:
         return _tok
     raw = os.environ.get("PLAY_SERVICE_ACCOUNT_JSON") or pathlib.Path(
         os.path.expanduser("~/keys/play-service-account.json")).read_text()
@@ -62,7 +64,8 @@ def _token():
     body = urllib.parse.urlencode({"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
                                    "assertion": f"{h}.{c}.{_b64(sig)}"}).encode()
     with urllib.request.urlopen("https://oauth2.googleapis.com/token", body, timeout=60) as r:
-        _tok = json.load(r)["access_token"]
+        d = json.load(r)
+    _tok, _exp = d["access_token"], now + int(d.get("expires_in", 3600))
     return _tok
 
 
