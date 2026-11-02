@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Tren de versiones en el Mac (BaltaJmn/ci PUBLICAR.md 7): tren-mac.sh tick cada 30 min y el lunes a las 7:30.
+       Cada tick hace lo que falta de cada app y sale enseguida si no hay nada. Si el Mac dormia, launchd lo lanza al
+       despertar; pmset lo despierta el lunes a las 7:25. Se instala copiandolo a ~/Library/LaunchAgents (PUBLICAR.md 7). -->
+  <key>Label</key><string>com.baltajmn.tren</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/zsh</string><string>/Users/baltajmn/.tren/ci/tienda/tren-mac.sh</string><string>tick</string></array>
+  <key>StartInterval</key><integer>1800</integer>
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>30</integer></dict>
+  <key>StandardOutPath</key><string>/Users/baltajmn/Library/Logs/tren.log</string>
+  <key>StandardErrorPath</key><string>/Users/baltajmn/Library/Logs/tren.log</string>
+</dict>
+</plist>

@@ -16,12 +16,11 @@ bajo `with:` (paquete, CN de la firma, tareas de Gradle, ruta del AAB, fichero d
 
 | Fichero | Se dispara | Hace |
 |---|---|---|
-| `.github/workflows/release.yml` | Etiqueta `v*`, o a mano | Play (canal `alpha`) y TestFlight con la misma versión |
+| `.github/workflows/release.yml` | A mano (antes del 2-11-2026, también una etiqueta `v*`) | Play (canal `alpha`) y TestFlight con la misma versión |
 | `.github/workflows/listings.yml` | Push a `store/`, o a mano | Comprueba `store/`; a mano, sube la ficha a Play, a la App Store o a las dos |
-| `.github/workflows/tren.yml` | Domingo 19:37, lunes 1:17 y 9:07 (Madrid), cada uno con su reserva (21:37, 4:17, 11:07), o a mano | El tren de versiones de los lunes (FlowTime y Chroma): `PUBLICAR.md` sección 7 |
 
-Una etiqueta sube siempre a los canales de prueba de las dos tiendas. En las apps con tren, producción
-en Play y el envío a revisión de Apple los hace el tren los lunes, con aviso y botón de parar el domingo;
+`release.yml` sube a los canales de prueba de las dos tiendas. En las apps con tren, producción
+en Play y el envío a revisión de Apple los hace el tren de los lunes, en el Mac (`PUBLICAR.md` 7);
 en las demás, una persona en cada consola. A mano se puede elegir otro canal de
 Play, `status: draft` (app que nunca publicó) o solo una tienda (`stores`).
 
@@ -112,12 +111,6 @@ Los dos `.p12` son a propósito, y cada uno evita un fallo distinto:
 Los perfiles sí los sigue creando Xcode con la clave de la API: ningún `.mobileprovision` vive en un
 secreto. `ref` y `dry-run` como en el de Play: en seco, el archive se exporta firmado y no se sube. Los certificados, su contraseña y cómo se renuevan están en `~/keys/LEEME.md`.
 
-### `tren.yml`
-
-El tren de los lunes, entero: `plan` (numera, commit y etiqueta), las dos subidas con `ref` de esa
-etiqueta, `aviso`, `eco` y `lunes`. Entradas: `paso`, `seco`, `app`, `clave` y los valores de
-`release.yml`. Secretos: los de las dos subidas más `NTFY_TOPIC` y `NTFY_TOPIC_APROBAR`.
-
 ### `store-listings.yml`
 
 Comprueba `store/` con `comprobar.py` y, si `target` es `play`, `app-store` o `both`, sube la ficha:
@@ -137,7 +130,7 @@ Actions. Leen las credenciales del entorno en CI y del Llavero y `~/keys` en el 
 | `comprobar.py <repo>` | El contrato de `store/`: idiomas iguales, topes de cada tienda, gráficos y capturas |
 | `play.py estado\|ficha\|aab\|promover` | Play: canales y fichas; la ficha entera en una edición (`--dry` la valida y la tira); un AAB a un canal de prueba; `promover`, la `alpha` a producción, con `<repo>` también su ficha en la misma edición |
 | `appstore.py estado\|ficha\|capturas\|...\|enviar` | App Store Connect: qué falta antes de enviar, ficha, capturas, compras, adjuntos, versión, build y `enviar` a revisión (solo el tren) |
-| `tren.py domingo\|aviso\|eco\|lunes\|--prueba` | El tren de los lunes (`PUBLICAR.md` 7); `--prueba` comprueba la lógica sin red |
+| `tren.py tick\|seco <clave>\|--prueba` | El tren de los lunes, en el Mac (`PUBLICAR.md` 7): lo lanza `tren-mac.sh` desde launchd (`com.baltajmn.tren.plist`), con el prompt del escaparate en `escaparate.md`; `--prueba` comprueba la lógica sin red |
 | `compra.py <paquete> <producto Play> <producto Apple> [precio]` | La compra igual en las dos tiendas: textos de Apple copiados a Play y, con precio, base en España e igualación de Apple aplicada a Play donde la moneda coincide |
 | `compra.py --suscripcion <paquete> <suscripción Play> <producto Apple> <precio> <compra vitalicia> <traducciones.json> [--dry]` | La suscripción mensual en las dos tiendas: grupo Pro y precios por territorio en Apple, plan base `monthly` en Play, textos en todos los idiomas. Se puede repetir: completa lo que falte |
 | `revenuecat.py suscripcion <app> <paquete> <producto Play> <plan base>` | Productos en las dos apps de RevenueCat, unidos a `pro` y al paquete `$rc_monthly` de `default` |

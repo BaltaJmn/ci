@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Google Play from the terminal and from CI, the twin of appstore.py. The service account that
 publishes comes from PLAY_SERVICE_ACCOUNT_JSON (its content, in CI) or ~/keys/play-service-account.json.
-Nothing secret is printed. From the Mac, production never starts here: that is the weekly train
-(tren.py, from Actions) or a click in Play Console.
+Nothing secret is printed. From the command line, production never starts here: that is the weekly train
+(tren.py, which calls aab() itself) or a click in Play Console.
 
     play.py estado   <package>                                tracks, AABs and listing languages (read only)
     play.py ficha    <package> <repo> <web> [--dry]           listings, graphics, screenshots (phone and tablet) and contact
     play.py aab      <package> <aab> <track> <notes> [draft] [--dry]   AAB to internal, alpha or beta (production
-                                                              only from Actions); <notes> is a repo (its store/whatsnew)
+                                                              only from the train); <notes> is a repo (its store/whatsnew)
                                                               or a folder of whatsnew-<locale> files
     play.py promover <package> <versionCode> [<repo>] [--dry]   the alpha release with that code to production at 100%,
                                                               with its notes and, with <repo>, its whole listing (no
@@ -195,8 +195,6 @@ def ficha(package, repo, web, dry):
 
 
 def aab(package, path, track, notes, status="completed", dry=False, ficha_de=None, imagenes=False):
-    if track not in ("internal", "alpha", "beta") and not (track == "production" and os.environ.get("GITHUB_ACTIONS")):
-        sys.exit(f"Canal {track} no permitido: producción sale con el tren de los lunes o desde Play Console.")
     d = pathlib.Path(notes)
     d = d / "store/whatsnew" if (d / "store/whatsnew").is_dir() else d
     notes = [{"language": f.name.removeprefix("whatsnew-"), "text": _read(f)} for f in sorted(d.glob("whatsnew-*"))]
@@ -346,6 +344,8 @@ if __name__ == "__main__":
     elif len(a) == 4 and a[0] == "ficha":
         ficha(a[1], a[2], a[3], dry)
     elif len(a) in (5, 6) and a[0] == "aab":
+        if a[3] not in ("internal", "alpha", "beta"):
+            sys.exit(f"Canal {a[3]} no permitido: producción sale con el tren de los lunes (tren.py) o desde Play Console.")
         aab(a[1], a[2], a[3], a[4], "draft" if a[5:] == ["draft"] else "completed", dry)
     elif len(a) in (3, 4) and a[0] == "promover":
         promover(a[1], a[2], dry=dry, ficha_de=a[3] if len(a) == 4 else None, imagenes=True)

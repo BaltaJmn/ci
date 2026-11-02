@@ -2,9 +2,10 @@
 # Archives an iOS app and uploads it to App Store Connect from this Mac, signed the way
 # BaltaJmn/ci ios-testflight-release.yml signs in CI: both identities from ~/keys in a temporary
 # keychain, so neither a new development certificate nor cloud signing (ITMS-90035) gets in.
-# For when Actions cannot run: no macOS runner available, or billing stops a private repo.
+# The weekly train's iPhone build (tren.py) and any build by hand.
 #
 #   testflight.sh <repo dir> [version file]
+#   SECO=true testflight.sh ...   archive and export, nothing uploaded (the train's dry Monday)
 #
 # The version and build are the Android versionName and versionCode, like in CI. The version file
 # defaults to androidApp/build.gradle.kts; FlowTime keeps them in
@@ -49,6 +50,8 @@ xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuratio
   -destination 'generic/platform=iOS' -archivePath $WORK/app.xcarchive $AUTH \
   TEAM_ID=$TEAM_ID MARKETING_VERSION=$VERSION_NAME CURRENT_PROJECT_VERSION=$VERSION_CODE \
   > $WORK/archive.log 2>&1 || { grep -E "error:|ARCHIVE FAILED" $WORK/archive.log | head -20; exit 1; }
+DESTINATION=upload
+[[ ${SECO:-} == true ]] && DESTINATION=export
 
 cat > $WORK/ExportOptions.plist <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -56,7 +59,7 @@ cat > $WORK/ExportOptions.plist <<PLIST
 <plist version="1.0">
 <dict>
   <key>method</key><string>app-store-connect</string>
-  <key>destination</key><string>upload</string>
+  <key>destination</key><string>$DESTINATION</string>
   <key>teamID</key><string>$TEAM_ID</string>
   <key>signingStyle</key><string>automatic</string>
   <key>uploadSymbols</key><true/>
@@ -65,8 +68,9 @@ cat > $WORK/ExportOptions.plist <<PLIST
 </plist>
 PLIST
 
-print "Subiendo..."
+print "Exportando ($DESTINATION)..."
 xcodebuild -exportArchive -archivePath $WORK/app.xcarchive -exportPath $WORK/export \
   -exportOptionsPlist $WORK/ExportOptions.plist $AUTH > $WORK/export.log 2>&1 ||
   { grep -E "error|90[0-9]{3}|FAILED" $WORK/export.log | cut -c1-400 | head -20; exit 1; }
+[[ $DESTINATION == export ]] && { print "En seco: $VERSION_NAME ($VERSION_CODE) archivada y exportada, sin subir."; exit 0; }
 grep -q "Upload succeeded" $WORK/export.log && print "Subida $VERSION_NAME ($VERSION_CODE): App Store Connect la está procesando."
