@@ -583,7 +583,7 @@ def subscription_prices(bundle, product, spain_price):
 
 
 def set_subscription_price(bundle, product, spain_price, dry):
-    """New price of an existing subscription from tomorrow: Spain at `spain_price` and the equalized
+    """New price of an existing subscription from the day after tomorrow: Spain at `spain_price` and the equalized
     price in every other territory, China included (see subscription()). Current subscribers keep
     theirs (`preserveCurrentPrice`), so nobody has to consent to a raise. Once approved, a price
     without `startDate` is refused (409 "Initial price cannot be created again"), and today too."""
@@ -594,10 +594,12 @@ def set_subscription_price(bundle, product, spain_price, dry):
     print(f"  {product}: {spain_price} EUR en ESP, {len(prices)} territorios")
     if dry:
         return
-    tomorrow = time.strftime("%Y-%m-%d", time.localtime(time.time() + 86400))
+    # Two days ahead: by the Spanish afternoon Apple no longer takes tomorrow (2-11 at 17:30: "must be
+    # on or after" the 4th)
+    start = time.strftime("%Y-%m-%d", time.localtime(time.time() + 2 * 86400))
     for t, pp in prices.items():
         api("POST", "/v1/subscriptionPrices", {"data": {"type": "subscriptionPrices", "attributes": {
-            "startDate": tomorrow, "preserveCurrentPrice": True}, "relationships": {
+            "startDate": start, "preserveCurrentPrice": True}, "relationships": {
             "subscription": {"data": {"type": "subscriptions", "id": sid}},
             "subscriptionPricePoint": {"data": {"type": "subscriptionPricePoints", "id": pp}},
             "territory": {"data": {"type": "territories", "id": t}}}}})
