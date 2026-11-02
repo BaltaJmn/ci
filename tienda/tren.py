@@ -386,6 +386,7 @@ def construir_aab(repo, a, destino):
     as production with its listing, so a broken bundle or listing shows on Monday and not the day Apple approves; only
     then is it kept as `destino`."""
     log = ruta("gradle.log")
+    print(f"{a['app']}: paquete de Play (gradle, y Play lo valida con la ficha)")
     with open(log, "w") as f:
         r = subprocess.run(["./gradlew", "--console=plain", *a["gradle"].split()], cwd=repo, stdout=f, stderr=subprocess.STDOUT)
     if r.returncode:
@@ -400,6 +401,7 @@ def testflight(repo, a):
     """The iPhone build of the checked-out tag to App Store Connect (testflight.sh, next to this file); dry, the
     archive is exported and not uploaded."""
     log = ruta("testflight.log")
+    print(f"{a['app']}: build de iPhone a TestFlight (unos 15 min)")
     with open(log, "w") as f:
         r = subprocess.run(["/bin/zsh", str(AQUI / "testflight.sh"), repo, a["version"]], stdout=f, stderr=subprocess.STDOUT,
                            env={**os.environ, "SECO": "true" if SECO else "false"})
@@ -528,6 +530,7 @@ def preparar(repo, a, S):
             S["nada"] = True
             volver(S)
             return print(f"{a['app']}: nada nuevo desde la {ultima}, sin version esta semana")
+        print(f"{a['app']}: escaparate (claude revisa ficha y capturas desde la {ultima})")
         S["escaparate"] = escaparate(repo, a, ultima)
         clon(a["repo"], a["github"])  # the escaparate's commit is main now
         guardar(S)

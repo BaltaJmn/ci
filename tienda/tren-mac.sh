@@ -5,6 +5,7 @@
 # tren.py keeps every app in its own clean clone in ~/.tren. Log: ~/Library/Logs/tren.log.
 set -eu
 export PATH=$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+export PYTHONUNBUFFERED=1   # release-train pipes it through tee: each line on screen as it happens, not at the end
 T=$HOME/.tren
 [[ -d $T/ci ]] || git clone -q https://github.com/BaltaJmn/ci.git $T/ci
 git -C $T/ci fetch -q origin && git -C $T/ci reset -q --hard origin/main
