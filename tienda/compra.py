@@ -19,6 +19,10 @@ Pro, one month) at that price in both stores, with the same texts. The name and 
 the lifetime purchase's texts plus `traducciones.json` ({locale: {"suffix", "desc"}}). Existing products
 are not touched.
 
+New subscription price: `compra.py --precio-suscripcion <package> <Play subscription> <App Store product>
+<price> [--dry]`, for new subscribers only (Play from now, App Store from tomorrow, the earliest Apple
+takes), with the same equalization as above.
+
 The bundle id is the package name, as in the whole family. `--dry` prints and changes nothing;
 `--solo-play` leaves the App Store as it is (a purchase in review, whose notes quote its price).
 """
@@ -97,7 +101,21 @@ def suscripcion(package, play_product, asc_product, price, lifetime, translation
     play.suscripcion(package, play_product, "monthly", prices, ptexts, dry)
 
 
+def precio_suscripcion(package, play_product, asc_product, price, dry):
+    appstore.set_subscription_price(package, asc_product, price, dry)
+    prices = play.convert(package, play.money(float(price) / 1.21, "EUR"))
+    for t, (amount, currency) in appstore.subscription_prices(package, asc_product, price).items():
+        r = A2.get(t)
+        if r in prices and prices[r]["currencyCode"] == currency:
+            prices[r] = play.money(amount, currency)
+    play.precio_suscripcion(package, play_product, "monthly", prices, dry)
+
+
 if __name__ == "__main__":
+    if "--precio-suscripcion" in sys.argv:
+        a = [x for x in sys.argv[1:] if not x.startswith("--")]
+        precio_suscripcion(*a[:4], "--dry" in sys.argv)
+        sys.exit()
     if "--suscripcion" in sys.argv:
         a = [x for x in sys.argv[1:] if not x.startswith("--")]
         suscripcion(a[0], a[1], a[2], a[3], a[4], a[5], "--dry" in sys.argv)

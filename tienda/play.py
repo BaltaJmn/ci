@@ -314,6 +314,30 @@ def suscripcion(package, product, base_plan, prices, listings, dry):
     print(f"  {product}: creada y activa en Play")
 
 
+def precio_suscripcion(package, product, base_plan, prices, dry):
+    """New price of an existing base plan in every region it is sold in; `prices` as in compra(). Only
+    new subscribers pay it: Play keeps the current ones on their old price."""
+    version = call("GET", f"{API}{package}/oneTimeProducts")["oneTimeProducts"][0]["regionsVersion"]["version"]
+    s = call("GET", f"{API}{package}/subscriptions/{product}")
+    bp = next(b for b in s["basePlans"] if b["basePlanId"] == base_plan)
+    for r in bp["regionalConfigs"]:
+        new = prices.get(r["regionCode"])
+        if not new or new["currencyCode"] != r["price"]["currencyCode"]:
+            sys.exit(f"{r['regionCode']}: Play cobra en {r['price']['currencyCode']} y el precio es {new}")
+        r["price"] = new
+    if "otherRegionsConfig" in bp:
+        es = float(prices["ES"]["units"]) + prices["ES"]["nanos"] / 1e9
+        bp["otherRegionsConfig"]["eurPrice"] = money(es / 1.21, "EUR")
+        bp["otherRegionsConfig"]["usdPrice"] = prices["US"]
+    print(f"  {product}/{base_plan}: ES {prices['ES']['units']}.{prices['ES']['nanos'] // 10**7:02d} EUR, "
+          f"US {prices['US']['units']}.{prices['US']['nanos'] // 10**7:02d} USD, {len(bp['regionalConfigs'])} regiones")
+    if dry:
+        print("  --dry: no se cambia nada")
+        return
+    call("PATCH", f"{API}{package}/subscriptions/{product}?updateMask=basePlans&regionsVersion.version={version}", s)
+    print(f"  {product}: precio guardado en Play")
+
+
 if __name__ == "__main__":
     dry = "--dry" in sys.argv
     a = [x for x in sys.argv[1:] if x != "--dry"]

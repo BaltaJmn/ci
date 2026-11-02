@@ -568,15 +568,40 @@ def _equalized(point):
     return out
 
 
+def _subscription_id(bundle, product):
+    app = app_of(bundle)["id"]
+    return next(s["id"] for g in get_all(f"/v1/apps/{app}/subscriptionGroups")
+                for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
+                if s["attributes"]["productId"] == product)
+
+
 def subscription_prices(bundle, product, spain_price):
     """What Apple charges per territory for that subscription, to copy it to Play: {ESP: ('0.99', 'EUR'), ...}."""
-    app = app_of(bundle)["id"]
-    sid = next(s["id"] for g in get_all(f"/v1/apps/{app}/subscriptionGroups")
-               for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
-               if s["attributes"]["productId"] == product)
-    out = {t: v for t, (_, v) in _equalized(_spain_point(sid, spain_price)).items()}
+    out = {t: v for t, (_, v) in _equalized(_spain_point(_subscription_id(bundle, product), spain_price)).items()}
     out["ESP"] = (spain_price, "EUR")
     return out
+
+
+def set_subscription_price(bundle, product, spain_price, dry):
+    """New price of an existing subscription from tomorrow: Spain at `spain_price` and the equalized
+    price in every other territory, China included (see subscription()). Current subscribers keep
+    theirs (`preserveCurrentPrice`), so nobody has to consent to a raise. Once approved, a price
+    without `startDate` is refused (409 "Initial price cannot be created again"), and today too."""
+    sid = _subscription_id(bundle, product)
+    point = _spain_point(sid, spain_price)
+    prices = {"ESP": point}
+    prices.update({t: pp for t, (pp, _) in _equalized(point).items()})
+    print(f"  {product}: {spain_price} EUR en ESP, {len(prices)} territorios")
+    if dry:
+        return
+    tomorrow = time.strftime("%Y-%m-%d", time.localtime(time.time() + 86400))
+    for t, pp in prices.items():
+        api("POST", "/v1/subscriptionPrices", {"data": {"type": "subscriptionPrices", "attributes": {
+            "startDate": tomorrow, "preserveCurrentPrice": True}, "relationships": {
+            "subscription": {"data": {"type": "subscriptions", "id": sid}},
+            "subscriptionPricePoint": {"data": {"type": "subscriptionPricePoints", "id": pp}},
+            "territory": {"data": {"type": "territories", "id": t}}}}})
+    print(f"  {product}: precio guardado en App Store")
 
 
 if __name__ == "__main__":
