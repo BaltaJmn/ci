@@ -33,6 +33,7 @@ preparar() {
 
 case ${1:-} in
   '') preparar
+      echo "Cada paso sale aqui con su hora; el registro entero de cada uno, en $T/<app>/ (gradle.log, testflight.log, escaparate.log)."
       /bin/zsh $T/ci/tienda/tren-mac.sh ya 2>&1 | tee -a $LOG ;;
   estado) for f in $T/*/estado.json(N); do
             /usr/bin/python3 - $f <<'EOF'

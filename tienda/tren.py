@@ -367,6 +367,26 @@ def ruta(nombre):
     return d / nombre
 
 
+def paso(a, texto):
+    """One line on screen (release-train) and in tren.log: the time, the app and what it starts or got."""
+    print(f"{datetime.datetime.now(MADRID):%H:%M} {a['app']}: {texto}")
+
+
+# The lines of a build worth seeing as they happen: the gradle tasks that take time, the end of each xcodebuild step,
+# the upload and any error. The whole output stays in the step's log in ~/.tren/<clave>/.
+VER = re.compile(r"^> Task :\S*(bundle|compile\S*Kotlin|minify)\S*$|BUILD (SUCCESSFUL|FAILED)|^\*\* .+ \*\*$|^e: |error:|[Uu]pload(ed|ing)? ")
+
+
+def correr(cmd, log, a, **kw):
+    """A long step into its log file, with the lines VER picks on screen as they come; its exit code."""
+    with open(log, "w") as f, subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace", **kw) as p:
+        for l in p.stdout:
+            f.write(l)
+            if VER.search(l.strip()):
+                paso(a, l.strip()[:160])
+    return p.returncode
+
+
 def resumen_log(log):
     """The lines that say why a build broke, short enough for a notice."""
     l = [x.strip() for x in pathlib.Path(log).read_text(errors="replace").splitlines() if x.strip()]
@@ -386,26 +406,24 @@ def construir_aab(repo, a, destino):
     as production with its listing, so a broken bundle or listing shows on Monday and not the day Apple approves; only
     then is it kept as `destino`."""
     log = ruta("gradle.log")
-    print(f"{a['app']}: paquete de Play (gradle, y Play lo valida con la ficha)")
-    with open(log, "w") as f:
-        r = subprocess.run(["./gradlew", "--console=plain", *a["gradle"].split()], cwd=repo, stdout=f, stderr=subprocess.STDOUT)
-    if r.returncode:
+    paso(a, "paquete de Play con gradle")
+    if correr(["./gradlew", "--console=plain", *a["gradle"].split()], log, a, cwd=repo):
         sys.exit(f"gradle: {resumen_log(log)}")
     prod = produccion_play(play.tracks(a["paquete"]))
     hecho = pathlib.Path(repo) / a["aab"]
+    paso(a, "Play valida el paquete con la ficha (unos minutos, sube las imagenes)")
     subir_play(repo, a["paquete"], hecho, notas_para(repo, prod, "HEAD"), etiqueta_de(repo, prod), True)
     shutil.copy(hecho, destino)
+    paso(a, "paquete de Play listo")
 
 
 def testflight(repo, a):
     """The iPhone build of the checked-out tag to App Store Connect (testflight.sh, next to this file); dry, the
     archive is exported and not uploaded."""
     log = ruta("testflight.log")
-    print(f"{a['app']}: build de iPhone a TestFlight (unos 15 min)")
-    with open(log, "w") as f:
-        r = subprocess.run(["/bin/zsh", str(AQUI / "testflight.sh"), repo, a["version"]], stdout=f, stderr=subprocess.STDOUT,
-                           env={**os.environ, "SECO": "true" if SECO else "false"})
-    if r.returncode:
+    paso(a, "build de iPhone a TestFlight (unos 15 min)")
+    if correr(["/bin/zsh", str(AQUI / "testflight.sh"), repo, a["version"]], log, a,
+              env={**os.environ, "SECO": "true" if SECO else "false"}):
         sys.exit(f"testflight.sh: {resumen_log(log)}")
 
 
@@ -518,6 +536,7 @@ def numerar(repo, a, S):
     if not SECO:
         empujar(repo, tag)
     S.update(version=nombre, code=code, tag=tag)
+    paso(a, f"version {nombre} ({code}) numerada, etiqueta {tag}")
 
 
 def preparar(repo, a, S):
@@ -530,8 +549,9 @@ def preparar(repo, a, S):
             S["nada"] = True
             volver(S)
             return print(f"{a['app']}: nada nuevo desde la {ultima}, sin version esta semana")
-        print(f"{a['app']}: escaparate (claude revisa ficha y capturas desde la {ultima})")
+        paso(a, f"escaparate: claude revisa ficha y capturas desde la {ultima}")
         S["escaparate"] = escaparate(repo, a, ultima)
+        paso(a, f"escaparate: {S['escaparate']}")
         clon(a["repo"], a["github"])  # the escaparate's commit is main now
         guardar(S)
     if time.time() > S.get("aviso", time.time()) + 11 * 3600:  # the Mac slept: ntfy keeps 12 h, a stop pressed then is gone
