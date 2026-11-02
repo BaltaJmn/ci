@@ -241,6 +241,8 @@ control de permisos de Claude bloquea `launchctl` y `sudo`). Sin argumentos, ins
 - el clon `~/.tren/ci` y el agente de launchd (lo vuelve a cargar si cambió el `.plist`);
 - la sesión de la CLI `claude` (`claude auth login` abre el navegador): sin ella, el escaparate no corre y la versión sale
   con la ficha que había;
+- las mejoras sin marcar de `gk/plan/apps/mejoras.md` (las apuntan reseñas y comentarios de Reddit en el GK35), para
+  atacarlas antes; Enter sigue igual y Ctrl-C para;
 - `tren-mac.sh ya`, que es `tren.py ya`: un tick que además arranca una versión de cada app con cambios, en ese momento y
   sin la hora del botón de parar (quien lo escribe ya decidió), con cada paso en pantalla y en el registro.
 

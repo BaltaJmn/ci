@@ -29,6 +29,12 @@ preparar() {
 
 case ${1:-} in
   '') preparar
+      # What reviews and Reddit comments asked for and is still open (gk/plan/apps/mejoras.md, written on the GK35): before the version
+      m=$(ssh -o ConnectTimeout=5 gk35 "grep '^- \[ \]' ~/AndroidStudioProjects/gk/plan/apps/mejoras.md" 2>/dev/null || true)
+      if [[ -n $m && -t 0 ]]; then
+        print -r -- "Mejoras sin hacer (gk/plan/apps/mejoras.md en el GK35; marca [x] lo hecho o descartado):"; print -r -- $m
+        read -r '?Enter saca la version igual; Ctrl-C para y las atacas antes. '
+      fi
       echo "Cada paso sale aqui con su hora; el registro entero de cada uno, en $T/<app>/ (gradle.log, testflight.log, escaparate.log)."
       /bin/zsh $T/ci/tienda/tren-mac.sh ya 2>&1 | tee -a $LOG ;;
   estado) for f in $T/*/estado.json(N); do
