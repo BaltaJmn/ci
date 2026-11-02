@@ -3,6 +3,8 @@
 upload keys. launchd (com.baltajmn.tren.plist) runs tren-mac.sh every 30 min and on Monday at 7:30, which calls:
 
     tren.py tick           every app of APPS in order: does what is missing and leaves at once when there is nothing
+    tren.py ya             a tick that starts this week's version now, any day and without the stop button's MARGEN
+                           (release-train: whoever typed it already decided); launchd follows it from there
     tren.py seco <clave>   one app's whole Monday in one go, dry
     tren.py --prueba       checks without network
 
@@ -61,6 +63,7 @@ FUERA = [":(exclude)*.md", ":(exclude).github", ":(exclude).idea"]
 MADRID = zoneinfo.ZoneInfo("Europe/Madrid")
 LUNES = (7, 30)  # from this Monday time a new version may start (launchd's fixed start)
 MARGEN = 3600  # from the "sale hoy" notice to the numbering: the time the stop button has
+YA = False  # tick started by hand (tren.py ya): no notice, no MARGEN
 # How long a store is in a state before it is told (once). States not here are never told.
 UMBRAL = {"usuario": 0, "fallo": 2 * 3600, "subir": 2 * 3600, "espera": 72 * 3600}
 TIENDA = {"play": "Play", "ios": "iPhone"}
@@ -532,13 +535,15 @@ def preparar(repo, a, S):
         del S["aviso"]
     if "aviso" not in S:
         S["version"] = subir_minor((pathlib.Path(repo) / a["version"]).read_text(encoding="utf-8"))[1]
-        anunciar(a, S)
+        if not YA:  # by hand (release-train): no stop button, whoever typed it already decided
+            anunciar(a, S)
         S["aviso"] = int(time.time())
         guardar(S)
-    if time.time() < S["aviso"] + MARGEN:
+    margen = 0 if YA else MARGEN
+    if time.time() < S["aviso"] + margen:
         return print(f"{a['app']} {S['version']}: el boton de parar tiene hasta las "
-                     f"{datetime.datetime.fromtimestamp(S['aviso'] + MARGEN, MADRID):%H:%M}")
-    if parada(leer_topic(), clave, S["version"], S["aviso"] + MARGEN):
+                     f"{datetime.datetime.fromtimestamp(S['aviso'] + margen, MADRID):%H:%M}")
+    if parada(leer_topic(), clave, S["version"], S["aviso"] + margen):
         avisar(f"{a['app']} {S['version']} parada esta semana", "pulsaste Parar", "nada; el lunes que viene sale lo que haya en main", 2)
         if S.get("antes"):
             return volver(S)
@@ -741,9 +746,9 @@ def sin_salir(a, S):
     return mio is None or mio in RECHAZO_IOS | POR_ENVIAR
 
 
-def empieza(S, t):
-    """Monday from LUNES: the week's version starts unless the last one is still on its way (and not stuck)."""
-    return (t.weekday() == 0 and (t.hour, t.minute) >= LUNES and S.get("semana") != t.date().isoformat()
+def empieza(S, t, ya=False):
+    """Monday from LUNES (or now, by hand): the week's version starts unless the last one is still on its way (and not stuck)."""
+    return ((ya or (t.weekday() == 0 and (t.hour, t.minute) >= LUNES)) and S.get("semana") != t.date().isoformat()
             and (not S.get("tag") or hecha(S) or atascada(S)))
 
 
@@ -782,14 +787,15 @@ def cerrar(a, S, res):
     guardar(S)
 
 
-def tick():
-    t = datetime.datetime.now(MADRID)
-    print(f"--- {t:%Y-%m-%d %H:%M}")
+def tick(ya=False):
+    global YA
+    YA, t = ya, datetime.datetime.now(MADRID)
+    print(f"--- {t:%Y-%m-%d %H:%M}" + (" (a mano)" if ya else ""))
     for clave in APPS:
         a, S = usar(clave), {}
         try:
             S = cargar()
-            if empieza(S, t) and (not atascada(S) or sin_salir(a, S)):
+            if empieza(S, t, ya) and (not atascada(S) or sin_salir(a, S)):
                 S = {"semana": t.date().isoformat(), **({"sustituye": S["version"], "antes": S} if atascada(S) else {})}
                 guardar(S)
             if hecha(S) or not (S.get("semana") or S.get("tag")):
@@ -857,6 +863,8 @@ def prueba():
     hoy = "2026-11-09"
     assert empieza({}, m(9, 7, 30)) and not empieza({}, m(9, 7, 29)) and not empieza({}, m(10, 9, 0))
     assert not empieza({"semana": hoy}, m(9, 8, 0))
+    assert empieza({}, m(10, 9, 0), ya=True) and not empieza({"semana": "2026-11-10"}, m(10, 9, 0), ya=True)  # by hand, any day, once
+    assert not empieza({"tag": "v1.3.0", "play": "pareja", "ios": "espera"}, m(10, 9, 0), ya=True)  # never over one in review
     assert empieza({"tag": "v1.3.0", "play": "ya", "ios": "ya", "semana": "2026-11-02"}, m(9, 8, 0))
     assert not empieza({"tag": "v1.3.0", "play": "espera", "ios": "pareja", "semana": "2026-11-02"}, m(9, 8, 0))  # Google reviews it
     assert not empieza({"tag": "v1.3.0", "play": "pareja", "ios": "espera", "semana": "2026-11-02"}, m(9, 8, 0))  # Apple reviews it
@@ -980,6 +988,8 @@ if __name__ == "__main__":
         prueba()
     elif a == ["tick"]:
         tick()
+    elif a == ["ya"]:
+        tick(ya=True)
     elif len(a) == 2 and a[0] == "seco" and a[1] in APPS:
         seco(a[1])
     else:

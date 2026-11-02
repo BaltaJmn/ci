@@ -234,17 +234,20 @@ plantilla de capturas y sus fuentes). Estado, paquetes y registros de cada app, 
 `~/Library/Logs/tren.log`. Un tick con otro en marcha no hace nada (`lockf`) y `caffeinate` no deja dormir al Mac a
 media build. Si el Mac dormía, launchd lanza el tick al despertar, y `pmset` lo despierta el lunes a las 7:25.
 
-Instalar, una vez (lo hace el usuario: el control de permisos de Claude bloquea `launchctl` y `sudo`). `pmset repeat`
-sustituye cualquier otro `repeat` que hubiera (`pmset -g sched` los enseña). Instalado un lunes desde las 7:30, el
-primer tick arranca ya la versión de ese día. La CLI `claude` tiene que tener sesión
-(`claude` y `/login`): sin ella, el escaparate no corre y la versión sale con la ficha que había.
+**`release-train`** (`tienda/release-train`, enlazado en `~/.local/bin`; lo escribe el usuario en el terminal, porque el
+control de permisos de Claude bloquea `launchctl` y `sudo`). Sin argumentos, instala lo que falte y arranca el tren ahora:
 
-```bash
-git clone https://github.com/BaltaJmn/ci.git ~/.tren/ci
-cp ~/.tren/ci/tienda/com.baltajmn.tren.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.baltajmn.tren.plist
-sudo pmset repeat wakeorpoweron M 07:25:00
-```
+- el clon `~/.tren/ci` y el agente de launchd (lo vuelve a cargar si cambió el `.plist`);
+- `sudo pmset repeat wakeorpoweron M 07:25:00`, que pide la contraseña una vez y sustituye cualquier otro `repeat` que
+  hubiera (`pmset -g sched` los enseña);
+- la sesión de la CLI `claude` (`claude auth login` abre el navegador): sin ella, el escaparate no corre y la versión sale
+  con la ficha que había;
+- `tren-mac.sh ya`, que es `tren.py ya`: un tick que arranca la versión de la semana de cada app en ese momento, cualquier
+  día y sin la hora del botón de parar (quien lo escribe ya decidió), con la salida en pantalla y en el registro.
+
+Lo que tarda días (Play cuando Apple aprueba, publicar el iPhone) lo sigue launchd solo. Escribirlo otra vez solo avanza lo
+que esté en marcha: una versión por semana y app, y nunca encima de una en revisión. `release-train estado` dice cómo va
+cada app, `release-train log` sigue el registro y `release-train seco <app>` hace el lunes entero de una app en seco.
 
 Parar el tren: `launchctl bootout gui/$(id -u)/com.baltajmn.tren`.
 

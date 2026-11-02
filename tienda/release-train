@@ -1,0 +1,48 @@
+#!/bin/zsh
+# release-train [estado | log | seco <app>]: the weekly release train by hand (PUBLICAR.md, section 7).
+#   release-train            sets up what this Mac is missing (launchd, the Monday wake, the claude session the escaparate
+#                            needs) and starts this week's version of every app now, here, with its output on screen.
+#                            launchd follows it alone from there: Play once Apple approves, the iPhone on sale once Play
+#                            publishes. Run again, it only advances what is moving (one version a week per app).
+#   release-train estado     where each app stands
+#   release-train log        follows the train's log
+#   release-train seco <app> one app's whole Monday, dry: nothing reaches the stores (flowtime, chroma, quilt, mood)
+# Linked from ~/.local/bin/release-train; the train itself runs from ~/.tren/ci, always at origin/main.
+set -eu
+T=$HOME/.tren P=com.baltajmn.tren LOG=$HOME/Library/Logs/tren.log
+plist=$HOME/Library/LaunchAgents/$P.plist
+
+preparar() {
+  [[ -d $T/ci ]] || git clone -q https://github.com/BaltaJmn/ci.git $T/ci
+  git -C $T/ci fetch -q origin && git -C $T/ci reset -q --hard origin/main
+  if ! cmp -s $T/ci/tienda/$P.plist $plist; then   # new or changed: load it again
+    mkdir -p ${plist:h} && cp $T/ci/tienda/$P.plist $plist
+    launchctl bootout gui/$UID/$P 2>/dev/null || true
+  fi
+  launchctl print gui/$UID/$P >/dev/null 2>&1 || launchctl bootstrap gui/$UID $plist
+  echo "launchd: cada 30 min y el lunes a las 7:30"
+  if ! pmset -g sched | grep -qi "wakepoweron at 7:25"; then
+    echo "Para que el Mac se despierte el lunes a las 7:25, macOS pide tu contrasena:"
+    sudo pmset repeat wakeorpoweron M 07:25:00
+  fi
+  if ! claude auth status 2>/dev/null | grep -q '"loggedIn": true'; then
+    echo "Sin sesion de claude el escaparate no corre: se abre el navegador para entrar."
+    claude auth login
+  fi
+}
+
+case ${1:-} in
+  '') preparar
+      /bin/zsh $T/ci/tienda/tren-mac.sh ya 2>&1 | tee -a $LOG ;;
+  estado) for f in $T/*/estado.json(N); do
+            /usr/bin/python3 - $f <<'EOF'
+import json, sys
+S, c = json.load(open(sys.argv[1])), sys.argv[1].split("/")[-2]
+g = lambda k: S.get(k, "-")
+print(c + ": " + ("nada nuevo esta semana" if S.get("nada") else "%s (%s), Play %s, iPhone %s" % (g("version"), g("code"), g("play"), g("ios"))))
+EOF
+          done ;;
+  log) tail -n 40 -f $LOG ;;
+  seco) /bin/zsh $T/ci/tienda/tren-mac.sh seco ${2:?app: flowtime, chroma, quilt o mood} 2>&1 | tee -a $LOG ;;
+  *) sed -n '2,10p' $0; exit 1 ;;
+esac
