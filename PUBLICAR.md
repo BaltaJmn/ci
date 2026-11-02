@@ -216,51 +216,51 @@ La subida a TestFlight por el workflow compartido quedó probada el 06-10-2026 c
 con su captura para la revisión, privacidad publicada, China fuera, idioma principal inglés y
 RevenueCat comprobado (clave `appl_` del código, producto en el derecho y en la oferta actual).
 
-## 7. El tren de los lunes (FlowTime, Chroma, Quilt y MoodTraker; en el Mac desde el 2-11-2026)
+## 7. El tren de versiones (FlowTime, Chroma, Quilt y MoodTraker; en el Mac y a mano desde el 2-11-2026)
 
-Una versión a la semana, la misma en las dos tiendas, sin que nadie la lance ni tenga que tocar nada (el usuario, 22 y
-27-10-2026). Desde el 2-11-2026 corre en el Mac (decisión del usuario): Actions está parado por facturación desde el
-28-10 (los cuatro repos son privados) y el Mac es la única máquina con Xcode, el Llavero, los `.jks` y los `.p12`. Es la
-excepción a "todo en el GK35". Todo pasa el lunes, y **Apple marca el paso**: Android nunca va por delante. La lógica
+La misma versión en las dos tiendas, sin tener que tocar nada una vez arrancada (el usuario, 22 y 27-10-2026). Desde el
+2-11-2026 corre en el Mac (decisión del usuario): Actions está parado por facturación desde el 28-10 (los cuatro repos son
+privados) y el Mac es la única máquina con Xcode, el Llavero, los `.jks` y los `.p12`. Es la excepción a "todo en el
+GK35". **Solo arranca a mano**, con `release-train`, cuando hay algo que sacar (el usuario, 2-11-2026: quiere
+controlarlo; nada sale solo los lunes). **Apple marca el paso**: Android nunca va por delante. La lógica
 vive en `tienda/tren.py`; las apps, en su `APPS`.
 
-**El reloj es launchd.** `tienda/com.baltajmn.tren.plist` lanza `tienda/tren-mac.sh tick` cada 30 min y el lunes a las
-7:30. `tren-mac.sh` corre desde su propio clon de este repo (`~/.tren/ci`, a `origin/main` en cada arranque, así que un
+**launchd sigue lo que está en marcha.** `tienda/com.baltajmn.tren.plist` lanza `tienda/tren-mac.sh tick` cada 30 min.
+`tren-mac.sh` corre desde su propio clon de este repo (`~/.tren/ci`, a `origin/main` en cada arranque, así que un
 push aquí cambia el tren), saca los topics de ntfy del Llavero y llama a `tren.py tick`, que recorre las apps en orden
-(FlowTime, Chroma, Quilt, MoodTraker) y hace lo que falte de cada una; sin nada que hacer, sale enseguida y sin red. Cada
+(FlowTime, Chroma, Quilt, MoodTraker) y lleva un paso más cada versión que arrancó `release-train`, sin arrancar nunca una; sin nada que hacer, sale enseguida y sin red. Cada
 app trabaja en un clon limpio, `~/.tren/<carpeta>` (fetch y reset a `origin/main`), nunca en las carpetas del usuario;
 `keystore.properties` y `local.properties` son enlaces a los suyos. El escaparate usa además `~/.tren/gk` (solo la
 plantilla de capturas y sus fuentes). Estado, paquetes y registros de cada app, en `~/.tren/<clave>/`; el de todo, en
 `~/Library/Logs/tren.log`. Un tick con otro en marcha no hace nada (`lockf`) y `caffeinate` no deja dormir al Mac a
-media build. Si el Mac dormía, launchd lanza el tick al despertar, y `pmset` lo despierta el lunes a las 7:25.
+media build. Si el Mac dormía, launchd lanza el tick al despertar.
 
 **`release-train`** (`tienda/release-train`, enlazado en `~/.local/bin`; lo escribe el usuario en el terminal, porque el
 control de permisos de Claude bloquea `launchctl` y `sudo`). Sin argumentos, instala lo que falte y arranca el tren ahora:
 
 - el clon `~/.tren/ci` y el agente de launchd (lo vuelve a cargar si cambió el `.plist`);
-- `sudo pmset repeat wakeorpoweron M 07:25:00`, que pide la contraseña una vez y sustituye cualquier otro `repeat` que
-  hubiera (`pmset -g sched` los enseña);
 - la sesión de la CLI `claude` (`claude auth login` abre el navegador): sin ella, el escaparate no corre y la versión sale
   con la ficha que había;
-- `tren-mac.sh ya`, que es `tren.py ya`: un tick que arranca la versión de la semana de cada app en ese momento, cualquier
-  día y sin la hora del botón de parar (quien lo escribe ya decidió), con la salida en pantalla y en el registro.
+- `tren-mac.sh ya`, que es `tren.py ya`: un tick que además arranca una versión de cada app con cambios, en ese momento y
+  sin la hora del botón de parar (quien lo escribe ya decidió), con cada paso en pantalla y en el registro.
 
 Lo que tarda días (Play cuando Apple aprueba, publicar el iPhone) lo sigue launchd solo. Escribirlo otra vez solo avanza lo
-que esté en marcha: una versión por semana y app, y nunca encima de una en revisión. `release-train estado` dice cómo va
-cada app, `release-train log` sigue el registro y `release-train seco <app>` hace el lunes entero de una app en seco.
+que esté en marcha: nunca dos versiones de una app el mismo día ni una encima de otra en revisión. `release-train estado`
+dice cómo va cada app, `release-train log` sigue el registro y `release-train seco <app>` hace la vuelta entera de una app
+en seco. El despertar del lunes que dejó la primera instalación ya no hace falta: `sudo pmset repeat cancel`.
 
 Parar el tren: `launchctl bootout gui/$(id -u)/com.baltajmn.tren`.
 
 | Paso, por app | Qué hace |
 |---|---|
-| a) Escaparate (lunes desde las 7:30) | Solo si main cambió desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`). `claude -p` con sonnet y `tienda/escaparate.md` lee el diff; si hay algo visible, novedades (`store/whatsnew`, todos los idiomas), ficha y frames de `gk/contenido/plantilla/tienda/apps.js` y `textos.js`, las capturas sin procesar con Roborazzi donde lo haya y `todas.sh <app>`. Un revisor aparte (otro `claude -p`) pone nota, 9 como mínimo, y comprueba que la captura de Pro coincide con el muro de pago y con los precios de App Store Connect (los que puso `compra.py`). Con una vuelta de arreglo si no llega. Después `comprobar.py`, commit de `store/` (en gk, solo `apps.js` y `textos.js`) y push a main. Si algo no pasa, se descarta y la versión sale con la ficha que había |
-| b) Aviso | ntfy "<App> X.Y.0 sale hoy", prioridad 2, con lo que hizo el escaparate y el botón "Parar esta semana", que tiene 60 min (`MARGEN`). Uno pulsado después no hace nada |
+| a) Escaparate (al escribir `release-train`) | Solo si main cambió desde la última etiqueta (sin contar `.md`, `.github` ni `.idea`). `claude -p` con sonnet y `tienda/escaparate.md` lee el diff; si hay algo visible, novedades (`store/whatsnew`, todos los idiomas), ficha y frames de `gk/contenido/plantilla/tienda/apps.js` y `textos.js`, las capturas sin procesar con Roborazzi donde lo haya y `todas.sh <app>`. Un revisor aparte (otro `claude -p`) pone nota, 9 como mínimo, y comprueba que la captura de Pro coincide con el muro de pago y con los precios de App Store Connect (los que puso `compra.py`). Con una vuelta de arreglo si no llega. Después `comprobar.py`, commit de `store/` (en gk, solo `apps.js` y `textos.js`) y push a main. Si algo no pasa, se descarta y la versión sale con la ficha que había |
+| b) Aviso | Con `release-train` no hay aviso ni espera. Solo si un tick de launchd retoma un arranque que `release-train` dejó a medias: ntfy "<App> X.Y.0 sale hoy", prioridad 2, con el botón "Parar esta semana", que tiene 60 min (`MARGEN`) |
 | c) Apple | Sube la minor y el `versionCode`, commit `tren: <App> X.Y.0 (N)` y etiqueta `vX.Y.0` a main. El paquete de Play (`bundleRelease` del clon), que Play valida ya como producción con su ficha y que queda en `~/.tren/<clave>/aab-vX.Y.0.aab`; `testflight.sh`; con la build procesada, `nueva`, publicación **MANUAL**, ficha, capturas si cambiaron desde la versión a la venta, novedades, notas, build y `enviar` |
 | d) Play | Con Apple aprobada (`PENDING_DEVELOPER_RELEASE`), ese paquete a producción al 100 % con sus notas y la ficha en la misma edición, imágenes solo si cambiaron (`play.aab ... ficha_de`, `ERROR_IF_IN_REVIEW`) |
 | e) iPhone a la venta | Con Play publicada (`PUBLISHED`), `appStoreVersionReleaseRequests` |
 
-Lo que espera una revisión se mira en cada tick, cualquier día. Una versión que el lunes sigue en camino continúa, y esa
-semana no empieza otra.
+Lo que espera una revisión se mira en cada tick, cualquier día. Mientras una versión sigue en camino, `release-train` no
+arranca otra de esa app.
 
 **Las dos tiendas o ninguna** (el usuario, 23-10-2026). Por tienda, cada paso deja uno de estos estados: `ya`, `sale`,
 `espera` (se arregla solo: una revisión de Google o de Apple, otro envío de Apple como una prueba de página de producto o
@@ -271,7 +271,7 @@ aprobado espera (una versión aprobada no tiene vuelta atrás en Apple): el usua
 solo.
 
 **Un rechazo de Apple** es `usuario`, con su aviso al momento. Si el usuario contesta y Apple aprueba, sigue sola. Si no,
-el lunes siguiente la versión nueva la sustituye en las dos tiendas: el tren cancela su envío (`UNRESOLVED_ISSUES`, como
+la siguiente versión que arranque `release-train` la sustituye en las dos tiendas: el tren cancela su envío (`UNRESOLVED_ISSUES`, como
 a mano el 31-10), `publicar_ios` renombra la versión y lleva la build nueva. Igual con una que nunca llegó a App Review
 (una build rota). Play nunca la tuvo, así que allí no hay nada que deshacer.
 
@@ -281,18 +281,18 @@ Google revisa otra cosa, sin cancelarla, y el tren reintenta. La lectura de *Res
 (`versiones.mjs play`) ya solo es para la tabla de semana.
 
 **Fichas y pruebas a revisión de martes a jueves** (temporadas, experimentos, eventos, pruebas de página de producto),
-salvo la ficha que va con la versión: el tren sale el lunes, y Apple no acepta su envío con otro abierto. Si coinciden,
+salvo la ficha que va con la versión: Apple no acepta su envío con otro abierto. Si coinciden,
 no pasa nada: el tren espera a que acabe y sale.
 
 **Avisos: dos líneas, solo si hay que hacer algo** (el usuario, 27-10-2026). Título con app, versión y qué pasa; cuerpo
 "Causa: ..." y "Haz: ...". Cada estado se dice una vez (`seguir` de `tren.py`): `usuario` al momento, `fallo` y `subir`
 a las 2 h, `espera` a las 72 h, con prioridad 3. Lo que sale llega en silencio (prioridad 2): a revisión de Apple, a
-producción de Play, a la venta. El lunes, el aviso del botón.
+producción de Play, a la venta.
 
 **Números.** El mismo `versionName` y `versionCode` en las dos tiendas (el fichero de versión de Android). Cada tren sube
 la minor (`2.5.0` a `2.6.0`), y el `versionCode` es el mayor usado en cualquier sitio más uno: el fichero de main, todo
 lo que Play ha recibido (`play.py usados`, también lo descartado) y todas las builds de App Store Connect, TestFlight
-incluido (`ios_max_build`). Nadie toca `versionName` ni pone etiquetas entre semana.
+incluido (`ios_max_build`). Nadie toca `versionName` ni pone etiquetas a mano.
 
 **Builds de prueba de TestFlight** (lo que el usuario pide para probar en su iPhone con cuenta de Apple): `versionCode`
 del fichero al mayor usado más uno, commit en main y `~/keys/testflight.sh <repo> [fichero de versión]`, sin etiqueta.
@@ -307,8 +307,8 @@ venta, salen las genéricas de `store/whatsnew-generic` ("Arreglos y mejoras"). 
 
 **Deshacer un "Parar esta semana"** (dentro de sus 60 min): borrar en ntfy cada mensaje `parar tren <clave> <versión>`
 (`DELETE https://ntfy.sh/<topic>/<id>`; el id sale al leer el topic). `tren.py` descarta los mensajes borrados (ntfy los
-sigue dando con un evento `message_delete` aparte). Una orden de parar deja `parada` y la semana acaba ahí; lo de main
-sale el lunes siguiente.
+sigue dando con un evento `message_delete` aparte). Una orden de parar deja `parada` y ahí acaba; lo de main sale
+con el siguiente `release-train`.
 
 **El topic secreto** (`ntfy-topic-aprobar`, el de los botones de `gk/control/lote.mjs`, que ignora estas líneas) lleva:
 `parar tren <clave> <versión>` (el botón), `tren-lunes <clave> <json>` (estado por tienda, desde cuándo y qué se dijo,

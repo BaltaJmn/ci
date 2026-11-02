@@ -1,24 +1,26 @@
 #!/usr/bin/env python3
 """The weekly release train, on the Mac (PUBLICAR.md, section 7): the only machine with Xcode, the Keychain and the
-upload keys. launchd (com.baltajmn.tren.plist) runs tren-mac.sh every 30 min and on Monday at 7:30, which calls:
+upload keys. A version only starts by hand (release-train, the user, 2-11-2026: when there is something to ship); launchd
+(com.baltajmn.tren.plist) runs tren-mac.sh every 30 min to carry on what is moving. It calls:
 
-    tren.py tick           every app of APPS in order: does what is missing and leaves at once when there is nothing
-    tren.py ya             a tick that starts this week's version now, any day and without the stop button's MARGEN
-                           (release-train: whoever typed it already decided); launchd follows it from there
-    tren.py seco <clave>   one app's whole Monday in one go, dry
+    tren.py tick           every app of APPS in order: takes each version in flight one step further (never starts one)
+                           and leaves at once when nothing moves
+    tren.py ya             a tick that also starts a version of every app with changes, now (release-train)
+    tren.py seco <clave>   one app's whole run in one go, dry
     tren.py --prueba       checks without network
 
-Monday, per app, when main changed since its last tag (not counting FUERA):
+Per app, once release-train starts it and main changed since its last tag (not counting FUERA):
   a) escaparate (escaparate.md, claude -p with sonnet): what's new, listing and screenshots up to date, a separate
      reviewer (9 or more; the Pro screenshot matches the paywall and the prices), comprobar.py, commit and push
-  b) ntfy "<App> X.Y sale hoy" with the stop button, which has MARGEN
+  b) only if a launchd tick picks up a start that release-train left halfway: ntfy "<App> X.Y sale hoy" with the stop
+     button, which has MARGEN
   c) numbers it (minor + 1), commit and tag; the Play bundle, which Play validates, kept as
      ~/.tren/<clave>/aab-<tag>.aab; testflight.sh; App Review with releaseType MANUAL once TestFlight has the build
   d) Apple approved it (PENDING_DEVELOPER_RELEASE): that bundle to Play production with its listing
   e) Play published it: the iPhone goes on sale (appStoreVersionReleaseRequests)
-Apple sets the pace and Android never goes ahead. A version still moving on Monday goes on and no other starts; one
-stuck before Play (Apple rejected it, or it never reached App Review) is replaced by Monday's next: its submission is
-cancelled and the version renamed, with a new build.
+Apple sets the pace and Android never goes ahead. A version still moving goes on and release-train starts no other; one
+stuck before Play (Apple rejected it, or it never reached App Review) is replaced by the next one release-train starts:
+its submission is cancelled and the version renamed, with a new build.
 
 Per store, the states of the old tren-lunes: ya, sale, espera (clears alone), pareja (waits for the other store),
 usuario (only the user can: a rejection), fallo (an error), subir (a build is missing) and parada. They live in
@@ -61,7 +63,6 @@ IMAGENES_PLAY = ("store/play", "store/screenshots/play", "store/screenshots/tabl
 # A week with only these changes makes no version: documentation, workflows and IDE files.
 FUERA = [":(exclude)*.md", ":(exclude).github", ":(exclude).idea"]
 MADRID = zoneinfo.ZoneInfo("Europe/Madrid")
-LUNES = (7, 30)  # from this Monday time a new version may start (launchd's fixed start)
 MARGEN = 3600  # from the "sale hoy" notice to the numbering: the time the stop button has
 YA = False  # tick started by hand (tren.py ya): no notice, no MARGEN
 # How long a store is in a state before it is told (once). States not here are never told.
@@ -403,7 +404,7 @@ def subir_play(repo, paquete, aab, carpeta, base, dry):
 
 def construir_aab(repo, a, destino):
     """The Play bundle of the checked-out tag (gradle, signed with the user's keystore.properties). Play validates it now
-    as production with its listing, so a broken bundle or listing shows on Monday and not the day Apple approves; only
+    as production with its listing, so a broken bundle or listing shows at once and not the day Apple approves; only
     then is it kept as `destino`."""
     log = ruta("gradle.log")
     paso(a, "paquete de Play con gradle")
@@ -579,7 +580,7 @@ def preparar(repo, a, S):
 
 def volver(S):
     """No version this week after all (nothing new, or Parar): a stuck one stays the one in flight, since the user may
-    still fix it, and next Monday tries again."""
+    still fix it, and the next release-train tries again."""
     antes = S.pop("antes", None)
     if antes:
         semana = S["semana"]
@@ -756,8 +757,8 @@ def hecha(S):
 
 
 def atascada(S):
-    """Stuck before Play (Apple rejected it, or it never reached App Review: a build broke): Monday's next version
-    replaces it. One Apple approved is not: the iPhone has no way back from there, so it waits for Play."""
+    """Stuck before Play (Apple rejected it, or it never reached App Review: a build broke): the next version
+    release-train starts replaces it. One Apple approved is not: the iPhone has no way back from there, so it waits for Play."""
     p, i = S.get("play"), S.get("ios")
     return bool(S.get("tag")) and ((p == "pareja" and i in ("usuario", "fallo", "subir")) or (p == "subir" and i == "pareja"))
 
@@ -770,8 +771,8 @@ def sin_salir(a, S):
 
 
 def empieza(S, t, ya=False):
-    """Monday from LUNES (or now, by hand): the week's version starts unless the last one is still on its way (and not stuck)."""
-    return ((ya or (t.weekday() == 0 and (t.hour, t.minute) >= LUNES)) and S.get("semana") != t.date().isoformat()
+    """Only by hand (release-train), once a day: a version starts unless the last one is still on its way (and not stuck)."""
+    return (ya and S.get("semana") != t.date().isoformat()
             and (not S.get("tag") or hecha(S) or atascada(S)))
 
 
@@ -835,7 +836,7 @@ def tick(ya=False):
 
 
 def seco(clave):
-    """One app's whole Monday at once, dry: escaparate, notice, numbering, bundle (Play validates it as production
+    """One app's whole run at once, dry: escaparate, notice, numbering, bundle (Play validates it as production
     with its listing), the iPhone archive exported, and what App Store Connect would get."""
     global SECO
     SECO = True  # whoever calls it: nothing real comes out of here
@@ -882,16 +883,16 @@ def prueba():
     aviso = m(9, 7, 40).timestamp()
     tarde = [{"message": "parar tren chroma 1.3.0", "time": m(9, 8, 45).timestamp()}]
     assert not parada(tarde, "chroma", "1.3.0", aviso + MARGEN) and parada([{**tarde[0], "time": m(9, 8, 30).timestamp()}], "chroma", "1.3.0", aviso + MARGEN)
-    # When a week's version starts: Monday from 7:30, once, unless the last one is on its way and not stuck
+    # When a version starts: only by hand, once a day, unless the last one is on its way and not stuck
     hoy = "2026-11-09"
-    assert empieza({}, m(9, 7, 30)) and not empieza({}, m(9, 7, 29)) and not empieza({}, m(10, 9, 0))
-    assert not empieza({"semana": hoy}, m(9, 8, 0))
+    assert not empieza({}, m(9, 7, 30)) and not empieza({}, m(10, 9, 0))  # launchd's ticks never start one
+    assert not empieza({"semana": hoy}, m(9, 8, 0), ya=True)
     assert empieza({}, m(10, 9, 0), ya=True) and not empieza({"semana": "2026-11-10"}, m(10, 9, 0), ya=True)  # by hand, any day, once
     assert not empieza({"tag": "v1.3.0", "play": "pareja", "ios": "espera"}, m(10, 9, 0), ya=True)  # never over one in review
-    assert empieza({"tag": "v1.3.0", "play": "ya", "ios": "ya", "semana": "2026-11-02"}, m(9, 8, 0))
-    assert not empieza({"tag": "v1.3.0", "play": "espera", "ios": "pareja", "semana": "2026-11-02"}, m(9, 8, 0))  # Google reviews it
-    assert not empieza({"tag": "v1.3.0", "play": "pareja", "ios": "espera", "semana": "2026-11-02"}, m(9, 8, 0))  # Apple reviews it
-    assert empieza({"tag": "v1.3.0", "play": "pareja", "ios": "usuario", "semana": "2026-11-02"}, m(9, 8, 0))  # rejected: replaced
+    assert empieza({"tag": "v1.3.0", "play": "ya", "ios": "ya", "semana": "2026-11-02"}, m(9, 8, 0), ya=True)
+    assert not empieza({"tag": "v1.3.0", "play": "espera", "ios": "pareja", "semana": "2026-11-02"}, m(9, 8, 0), ya=True)  # Google reviews it
+    assert not empieza({"tag": "v1.3.0", "play": "pareja", "ios": "espera", "semana": "2026-11-02"}, m(9, 8, 0), ya=True)  # Apple reviews it
+    assert empieza({"tag": "v1.3.0", "play": "pareja", "ios": "usuario", "semana": "2026-11-02"}, m(9, 8, 0), ya=True)  # rejected: replaced
     assert atascada({"tag": "v1.3.0", "play": "pareja", "ios": "fallo"}) and not atascada({"tag": "v1.3.0", "play": "sale", "ios": "fallo"})
     assert atascada({"tag": "v1.3.0", "play": "subir", "ios": "pareja"})  # the Play bundle broke before Apple
     assert not atascada({"tag": "v1.3.0", "play": "fallo", "ios": "pareja"})  # Apple approved: it waits for Play
@@ -900,7 +901,7 @@ def prueba():
     viejo = {"tag": "v1.3.0", "version": "1.3.0", "code": 26, "play": "pareja", "ios": "usuario", "semana": "2026-11-02"}
     S = {"semana": hoy, "sustituye": "1.3.0", "antes": dict(viejo), "nada": True}
     volver(S)
-    assert S == {**viejo, "semana": hoy} and not empieza(S, m(9, 9, 0)) and empieza(S, m(16, 8, 0))
+    assert S == {**viejo, "semana": hoy} and not empieza(S, m(9, 9, 0), ya=True) and empieza(S, m(16, 8, 0), ya=True)
     S = {"semana": hoy, "nada": True}
     volver(S)
     assert S == {"semana": hoy, "nada": True}

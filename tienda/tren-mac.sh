@@ -1,7 +1,7 @@
 #!/bin/zsh
-# tren-mac.sh tick | ya | seco <clave>: the weekly release train on this Mac (PUBLICAR.md, section 7). launchd runs `tick`
-# every 30 min and on Monday at 7:30 (com.baltajmn.tren.plist, next to this file); `ya` starts the week's version now
-# (release-train); `seco` is one app's dry Monday, by hand. It runs from its own clean clone of ci (~/.tren/ci, brought to origin/main first), never from a working copy;
+# tren-mac.sh tick | ya | seco <clave>: the release train on this Mac (PUBLICAR.md, section 7). launchd runs `tick` every
+# 30 min to carry on what is moving (com.baltajmn.tren.plist, next to this file); `ya` starts the versions, by hand
+# (release-train); `seco` is one app's dry run. It runs from its own clean clone of ci (~/.tren/ci, brought to origin/main first), never from a working copy;
 # tren.py keeps every app in its own clean clone in ~/.tren. Log: ~/Library/Logs/tren.log.
 set -eu
 export PATH=$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
