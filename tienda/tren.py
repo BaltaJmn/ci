@@ -412,10 +412,10 @@ def construir_aab(repo, a, destino):
         sys.exit(f"gradle: {resumen_log(log)}")
     prod = produccion_play(play.tracks(a["paquete"]))
     hecho = pathlib.Path(repo) / a["aab"]
-    paso(a, "Play valida el paquete con la ficha (unos minutos, sube las imagenes)")
+    paso(a, "Play valida el paquete con la ficha, sin publicarlo (unos minutos)")
     subir_play(repo, a["paquete"], hecho, notas_para(repo, prod, "HEAD"), etiqueta_de(repo, prod), True)
     shutil.copy(hecho, destino)
-    paso(a, "paquete de Play listo")
+    paso(a, "paquete de Play validado y guardado: va a Play cuando Apple apruebe")
 
 
 def testflight(repo, a):

@@ -107,7 +107,7 @@ class Edit:
             return
         if kind is None:
             call("POST", f"{self.url}:validate")
-            print("  --dry: Play valida la edición; descartada sin cambiar nada")
+            print("  Play la da por buena y se descarta: no se publica nada")
         call("DELETE", self.url)
 
     def image(self, language, kind, png):
@@ -204,7 +204,7 @@ def aab(package, path, track, notes, status="completed", dry=False, ficha_de=Non
     with Edit(package, dry) as e:
         vc = call("POST", f"{e.up}/edits/{e.id}/bundles?uploadType=media", data=pathlib.Path(path).read_bytes(),
                   ctype="application/octet-stream")["versionCode"]
-        print(f"  AAB subido: versionCode {vc}")
+        print(f"  AAB {'a validar, sin publicar' if dry else 'subido'}: versionCode {vc}")
         if ficha_de:  # production only: see the header
             _ficha(e, ficha_de, imagenes)
         # A locale added to store/ reaches the notes before its listing is uploaded (that one waits for a yes)
@@ -212,7 +212,7 @@ def aab(package, path, track, notes, status="completed", dry=False, ficha_de=Non
         notes = [n for n in notes if n["language"] in listed]
         call("PUT", f"{e.url}/tracks/{track}", {"track": track, "releases": [
             {"versionCodes": [str(vc)], "status": status, "releaseNotes": notes}]})
-        print(f"  canal {track}, {status}, notas en {len(notes)} idiomas")
+        print(f"  {'se prueba como' if dry else 'canal'} {track}, {status}, notas en {len(notes)} idiomas")
 
 
 def promover(package, code, cancelar=False, dry=False, ficha_de=None, imagenes=False):
