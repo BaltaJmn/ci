@@ -195,7 +195,9 @@ def ficha(bundle, repo, dry):
         if loc not in vlocs and not dry:
             vlocs = {l["attributes"]["locale"]: l for l in get_all(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")}
         texts = {"description": _read(d / "description.txt"), "keywords": _read(d / "keywords.txt"),
-                 "promotionalText": _read(d / "promo.txt"), "supportUrl": base_v.get("supportUrl")}
+                 "promotionalText": _read(d / "promo.txt"), "supportUrl": base_v.get("supportUrl"),
+                 # AdMob looks for app-ads.txt on the Marketing URL: without it, the app stays on limited ads.
+                 "marketingUrl": base_v.get("marketingUrl")}
         _upsert("appStoreVersionLocalizations", "appStoreVersion", v["id"], vlocs, loc,
                 {k: x for k, x in texts.items() if x}, dry)
 
