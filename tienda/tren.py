@@ -776,6 +776,12 @@ def empieza(S, t, ya=False):
             and (not S.get("tag") or hecha(S) or atascada(S)))
 
 
+def en_cola(S, ya):
+    """Queued by release-train (9-11-2026) while the last one was on its way: a plain tick starts it once that one is
+    out in both stores, or stuck. With the notice and its stop button, as any start a tick picks up."""
+    return not ya and bool(S.get("cola")) and (hecha(S) or atascada(S))
+
+
 def seguir(res, prev, ahora):
     """The tren-lunes to keep and the stores to tell now. Per store, since when it is in its state (desde)
     and what was told (dicho): each state is told once, after its UMBRAL."""
@@ -819,9 +825,13 @@ def tick(ya=False):
         a, S = usar(clave), {}
         try:
             S = cargar()
-            if empieza(S, t, ya) and (not atascada(S) or sin_salir(a, S)):
+            if empieza(S, t, ya or en_cola(S, ya)) and (not atascada(S) or sin_salir(a, S)):
                 S = {"semana": t.date().isoformat(), **({"sustituye": S["version"], "antes": S} if atascada(S) else {})}
                 guardar(S)
+            elif ya and S.get("tag") and not hecha(S) and not S.get("cola"):
+                S["cola"] = True  # release-train with one still on its way: the tick starts the next once it is out
+                guardar(S)
+                print(f"{a['app']}: la siguiente queda en cola hasta que la {S.get('version')} este en las dos tiendas")
             if hecha(S) or not (S.get("semana") or S.get("tag")):
                 print(f"{a['app']}: nada que hacer")
                 continue
@@ -867,6 +877,9 @@ def seco(clave):
 def prueba():
     t = 'android {\n    versionCode = 24\n    versionName = "1.2.4"\n}'
     assert version(t) == ("1.2.4", 24) and subir_minor(t)[1:] == ("1.3.0", 25)
+    viaje = {"tag": "v2.6.0", "play": "pareja", "ios": "espera", "cola": True}
+    assert not en_cola(viaje, False) and not en_cola({**viaje, "play": "ya", "ios": "ya"}, True)
+    assert en_cola({**viaje, "play": "ya", "ios": "ya"}, False) and not en_cola({"tag": "v1", "play": "ya", "ios": "ya"}, False)
     assert subir_minor('const val versionCode = 66\nconst val versionName = "2.5.0"')[1:] == ("2.6.0", 67)
     assert subir_minor('versionCode = 9\nversionName = "1.8"')[1:] == ("1.9.0", 10)
     assert subir_minor(t, 30)[2] == 31 and subir_minor(t, 3)[2] == 25  # the highest used anywhere + 1

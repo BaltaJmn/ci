@@ -262,7 +262,8 @@ Parar el tren: `launchctl bootout gui/$(id -u)/com.baltajmn.tren`.
 | e) iPhone a la venta | Con Play publicada (`PUBLISHED`), `appStoreVersionReleaseRequests` |
 
 Lo que espera una revisión se mira en cada tick, cualquier día. Mientras una versión sigue en camino, `release-train` no
-arranca otra de esa app.
+arranca otra de esa app: la deja en cola (`cola` en su `estado.json`, 9-11-2026) y el primer tick tras salir la anterior
+en las dos tiendas la arranca solo, con el aviso "sale hoy" y su botón de parar.
 
 **Las dos tiendas o ninguna** (el usuario, 23-10-2026). Por tienda, cada paso deja uno de estos estados: `ya`, `sale`,
 `espera` (se arregla solo: una revisión de Google o de Apple, otro envío de Apple como una prueba de página de producto o
