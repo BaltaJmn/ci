@@ -491,8 +491,8 @@ def set_price(purchase, point):
                           "inAppPurchasePricePoint": {"data": {"type": "inAppPurchasePricePoints", "id": point}}}}]})
 
 
-def subscription(bundle, product, name, group_name, texts, spain_price, dry):
-    """A monthly subscription in its own group, with texts in every locale of `texts`
+def subscription(bundle, product, name, group_name, texts, spain_price, dry, period="ONE_MONTH", level=1):
+    """A subscription (monthly unless `period`, at `level` of the group) in its own group, with texts in every locale of `texts`
     ({locale: (name, description)}), Spain at `spain_price` and the equalized price in every other
     territory except China. Every step is skipped if done, so a failed run is resumed by running it
     again. Its review screenshot is not here: it needs the paywall showing the price."""
@@ -501,7 +501,7 @@ def subscription(bundle, product, name, group_name, texts, spain_price, dry):
     gid = groups[0]["id"] if groups else None
     sub = next((s for g in groups for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
                 if s["attributes"]["productId"] == product), None)
-    print(f"  {product}: grupo {group_name}, 1 mes, {spain_price} EUR en ESP, textos en {len(texts)} idiomas"
+    print(f"  {product}: grupo {group_name}, {period}, {spain_price} EUR en ESP, textos en {len(texts)} idiomas"
           f"{' (ya existe, se completa lo que falte)' if sub else ''}")
     if dry:
         return
@@ -516,8 +516,8 @@ def subscription(bundle, product, name, group_name, texts, spain_price, dry):
                 "relationships": {"subscriptionGroup": {"data": {"type": "subscriptionGroups", "id": gid}}}}})
     if not sub:
         sub = api("POST", "/v1/subscriptions", {"data": {"type": "subscriptions", "attributes": {
-            "name": name, "productId": product, "familySharable": False, "subscriptionPeriod": "ONE_MONTH",
-            "groupLevel": 1}, "relationships": {"group": {"data": {"type": "subscriptionGroups", "id": gid}}}}})["data"]
+            "name": name, "productId": product, "familySharable": False, "subscriptionPeriod": period,
+            "groupLevel": level}, "relationships": {"group": {"data": {"type": "subscriptionGroups", "id": gid}}}}})["data"]
     sid = sub["id"]
     have = {l["attributes"]["locale"] for l in get_all(f"/v1/subscriptions/{sid}/subscriptionLocalizations")}
     for loc, (n, d) in texts.items():

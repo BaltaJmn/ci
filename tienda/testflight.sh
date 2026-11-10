@@ -9,13 +9,15 @@
 #
 # The version and build are the Android versionName and versionCode, like in CI. The version file
 # defaults to androidApp/build.gradle.kts; FlowTime keeps them in
-# build-logic/plugins/src/main/java/Config.kt.
+# build-logic/plugins/src/main/java/Config.kt. A plain Xcode project (the iPhone-only mini apps)
+# names its project, scheme and version instead:
+#   PROJECT=Countwell.xcodeproj SCHEME=Countwell VERSION_NAME=1.0 VERSION_CODE=1 testflight.sh <dir>
 set -euo pipefail
 KEYS=~/keys
 PREFIX=dev.baltajmn
 secret() { security find-generic-password -a "$USER" -s "$PREFIX.$1" -w; }
 
-[[ -d ${1:-} ]] || { sed -n '2,11p' $0; exit 1; }
+[[ -d ${1:-} ]] || { sed -n '2,14p' $0; exit 1; }
 # One run at a time, across sessions: each run swaps the user keychain search list.
 if [[ -z ${TESTFLIGHT_LOCKED:-} ]]; then
   export TESTFLIGHT_LOCKED=1
@@ -23,8 +25,8 @@ if [[ -z ${TESTFLIGHT_LOCKED:-} ]]; then
 fi
 cd "$1"
 VERSION_FILE=${2:-androidApp/build.gradle.kts}
-VERSION_NAME=$(sed -n -E 's/.*versionName *= *"([^"]+)".*/\1/p' "$VERSION_FILE" | head -1)
-VERSION_CODE=$(sed -n -E 's/.*versionCode *= *([0-9]+).*/\1/p' "$VERSION_FILE" | head -1)
+VERSION_NAME=${VERSION_NAME:-$(sed -n -E 's/.*versionName *= *"([^"]+)".*/\1/p' "$VERSION_FILE" | head -1)}
+VERSION_CODE=${VERSION_CODE:-$(sed -n -E 's/.*versionCode *= *([0-9]+).*/\1/p' "$VERSION_FILE" | head -1)}
 [[ -n $VERSION_NAME && -n $VERSION_CODE ]] || { print "Sin versionName o versionCode en $VERSION_FILE"; exit 1; }
 
 WORK=$(mktemp -d)
@@ -46,7 +48,7 @@ AUTH=(-allowProvisioningUpdates -authenticationKeyPath $KEYS/appstore-api.p8
   -authenticationKeyID "$(secret appstore-key-id)" -authenticationKeyIssuerID "$(secret appstore-issuer-id)")
 
 print "Archivando $VERSION_NAME ($VERSION_CODE) de $PWD..."
-xcodebuild archive -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
+xcodebuild archive -project ${PROJECT:-iosApp/iosApp.xcodeproj} -scheme ${SCHEME:-iosApp} -configuration Release \
   -destination 'generic/platform=iOS' -archivePath $WORK/app.xcarchive $AUTH \
   TEAM_ID=$TEAM_ID MARKETING_VERSION=$VERSION_NAME CURRENT_PROJECT_VERSION=$VERSION_CODE \
   > $WORK/archive.log 2>&1 || { grep -E "error:|ARCHIVE FAILED" $WORK/archive.log | head -20; exit 1; }
