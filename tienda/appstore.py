@@ -296,11 +296,12 @@ def adjunto(bundle, path):
     print(f"{bundle}: {pathlib.Path(path).name} adjunto a la revisión de {v['attributes']['versionString']}")
 
 
-def adjuntos(bundle, repo, dry):
-    """store/revision/ of the repo to the version's App Review attachments, the ones it lacks by name: a new
-    version starts with none, and Apple asks for the recording in every submission (Chroma 1.10.0 went without
-    the ATT one and was rejected again, 11-11-2026)."""
-    carpeta = pathlib.Path(repo) / "store/revision"
+def adjuntos(bundle, carpeta, dry):
+    """The files of `carpeta` to the version's App Review attachments, the ones it lacks by name: a new version
+    starts with none, and Apple asks for the recording in every submission (Chroma 1.10.0 went without the ATT
+    one and was rejected again, 11-11-2026). Not in the repo: a recording of a real iPhone is private, and
+    Chroma's repo is public."""
+    carpeta = pathlib.Path(carpeta)
     if not carpeta.is_dir():
         return
     v, _ = editable(app_of(bundle)["id"])

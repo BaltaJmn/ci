@@ -603,7 +603,7 @@ def publicar_ios(repo, bundle, S, notas, base):
     # failed does not upload them again.
     appstore.ficha(bundle, repo, False)
     appstore.notas(bundle, repo, False)
-    appstore.adjuntos(bundle, repo, False)
+    appstore.adjuntos(bundle, ruta("revision"), False)  # ~/.tren/<clave>/revision: the App Review recordings
     appstore.novedades(bundle, repo, False, notas)
     appstore.capturas(bundle, repo, False, bool(base) and cambia(repo, base, tag, "store/screenshots/iphone") and S.get("capturas") != tag)
     S["capturas"] = tag
