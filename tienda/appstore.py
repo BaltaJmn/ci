@@ -296,6 +296,21 @@ def adjunto(bundle, path):
     print(f"{bundle}: {pathlib.Path(path).name} adjunto a la revisión de {v['attributes']['versionString']}")
 
 
+def adjuntos(bundle, repo, dry):
+    """store/revision/ of the repo to the version's App Review attachments, the ones it lacks by name: a new
+    version starts with none, and Apple asks for the recording in every submission (Chroma 1.10.0 went without
+    the ATT one and was rejected again, 11-11-2026)."""
+    carpeta = pathlib.Path(repo) / "store/revision"
+    if not carpeta.is_dir():
+        return
+    v, _ = editable(app_of(bundle)["id"])
+    rd = api("GET", f"/v1/appStoreVersions/{v['id']}/appStoreReviewDetail")["data"]
+    hay = {x["attributes"]["fileName"] for x in get_all(f"/v1/appStoreReviewDetails/{rd['id']}/appStoreReviewAttachments")}
+    for f in sorted(carpeta.iterdir()):
+        if f.is_file() and f.name not in hay:
+            print(f"  adjunto {f.name}") if dry else adjunto(bundle, f)
+
+
 def sin_china(bundle):
     a = app_of(bundle)["id"]
     ta = get_all(f"/v2/appAvailabilities/{a}/territoryAvailabilities?fields[territoryAvailabilities]="
