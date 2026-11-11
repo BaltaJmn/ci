@@ -26,7 +26,7 @@ and deletes nothing unless `--reemplazar`, which swaps the ones of every locale 
 sending to review stays in the web: the first non-consumable purchase of an app can only go in the
 same submission as a version, and the API does not add it. `enviar` is for the train's versions.
 """
-import base64, hashlib, io, json, os, pathlib, subprocess, sys, tempfile, time, urllib.error, urllib.request
+import base64, hashlib, io, json, os, pathlib, re, subprocess, sys, tempfile, time, urllib.error, urllib.request
 
 BASE = "https://api.appstoreconnect.apple.com"
 _tok, _exp = None, 0
@@ -384,7 +384,13 @@ def novedades(bundle, repo, dry, carpeta="store/whatsnew"):
     vlocs = {l["attributes"]["locale"]: l for l in get_all(f"/v1/appStoreVersions/{v['id']}/appStoreVersionLocalizations")}
     for f in sorted((pathlib.Path(repo) / carpeta).glob("whatsnew-*")):
         _upsert("appStoreVersionLocalizations", "appStoreVersion", v["id"], vlocs,
-                asc_locale(f.name.removeprefix("whatsnew-")), {"whatsNew": _read(f)}, dry)
+                asc_locale(f.name.removeprefix("whatsnew-")), {"whatsNew": sin_android(_read(f))}, dry)
+
+
+def sin_android(texto):
+    """The notes are Play's too: a line naming Android or Google Play is left out on the iPhone, where
+    Apple rejects it (2.3.10, MoodTraker 1.7.0 on 11-11-2026)."""
+    return "\n".join(l for l in texto.splitlines() if not re.search(r"android|google play", l, re.I))
 
 
 def notas(bundle, repo, dry):
