@@ -120,7 +120,7 @@ def app_of(bundle):
 
 def editable(app_id):
     vs = get_all(f"/v1/apps/{app_id}/appStoreVersions?filter[platform]=IOS&filter[appStoreState]="
-                 "PREPARE_FOR_SUBMISSION,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED")
+                 "PREPARE_FOR_SUBMISSION,READY_FOR_REVIEW,DEVELOPER_REJECTED,REJECTED,METADATA_REJECTED")
     infos = [i for i in get_all(f"/v1/apps/{app_id}/appInfos")
              if i["attributes"].get("appStoreState") not in ("READY_FOR_SALE", "READY_FOR_DISTRIBUTION")]
     if not vs:
@@ -513,23 +513,27 @@ def set_price(purchase, point):
                           "inAppPurchasePricePoint": {"data": {"type": "inAppPurchasePricePoints", "id": point}}}}]})
 
 
-def subscription(bundle, product, name, group_name, texts, spain_price, dry, period="ONE_MONTH", level=1):
+def subscription(bundle, product, name, group_name, texts, spain_price, dry, period="ONE_MONTH", level=1, usa_price=None,
+                 by_name=False):
     """A subscription (monthly unless `period`, at `level` of the group) in its own group, with texts in every locale of `texts`
     ({locale: (name, description)}), Spain at `spain_price` and the equalized price in every other
-    territory except China. Every step is skipped if done, so a failed run is resumed by running it
+    territory except China; the United States at `usa_price` dollars instead, when given (Spain equalized
+    lands below the round dollar price: 9.99 EUR gives 8.99 USD). Every step is skipped if done, so a failed run is resumed by running it
     again. Its review screenshot is not here: it needs the paywall showing the price."""
     app = app_of(bundle)["id"]
     groups = get_all(f"/v1/apps/{app}/subscriptionGroups")
+    if by_name:   # a reused App Store record: its old group keeps the old app's locked name, so a group of its own
+        groups = [g for g in groups if g["attributes"]["referenceName"] == group_name]
     gid = groups[0]["id"] if groups else None
     sub = next((s for g in groups for s in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions")
                 if s["attributes"]["productId"] == product), None)
-    print(f"  {product}: grupo {group_name}, {period}, {spain_price} EUR en ESP, textos en {len(texts)} idiomas"
+    print(f"  {product}: grupo {group_name}, {period}, {spain_price} EUR en ESP{f', {usa_price} USD en USA' if usa_price else ''}, textos en {len(texts)} idiomas"
           f"{' (ya existe, se completa lo que falte)' if sub else ''}")
     if dry:
         return
     if not gid:
         gid = api("POST", "/v1/subscriptionGroups", {"data": {"type": "subscriptionGroups", "attributes": {
-            "referenceName": "Pro"}, "relationships": {"app": {"data": {"type": "apps", "id": app}}}}})["data"]["id"]
+            "referenceName": group_name if by_name else "Pro"}, "relationships": {"app": {"data": {"type": "apps", "id": app}}}}})["data"]["id"]
     have = {l["attributes"]["locale"] for l in get_all(f"/v1/subscriptionGroups/{gid}/subscriptionGroupLocalizations")}
     for loc in texts:
         if loc not in have:
@@ -550,6 +554,8 @@ def subscription(bundle, product, name, group_name, texts, spain_price, dry, per
     point = _spain_point(sid, spain_price)
     prices = {"ESP": point}
     prices.update({t: pp for t, (pp, _) in _equalized(point).items()})
+    if usa_price:
+        prices["USA"] = _spain_point(sid, usa_price, "USA")
     # Sold everywhere but China, yet priced in China too: without it the subscription stays in
     # MISSING_METADATA and review refuses it (IAP_SUBMISSION_NOT_ALLOWED_MISSING_PRICING_DATA, 20-10-2026).
     terr = [{"type": "territories", "id": t} for t in prices if t != "CHN"]
@@ -571,11 +577,11 @@ def subscription(bundle, product, name, group_name, texts, spain_price, dry, per
     print(f"  {product}: lista, {len(prices)} territorios con precio")
 
 
-def _spain_point(sid, spain_price):
-    pts = get_all(f"/v1/subscriptions/{sid}/pricePoints?filter[territory]=ESP&limit=200")
+def _spain_point(sid, spain_price, territory="ESP"):
+    pts = get_all(f"/v1/subscriptions/{sid}/pricePoints?filter[territory]={territory}&limit=200")
     p = next((x for x in pts if float(x["attributes"]["customerPrice"]) == float(spain_price)), None)
     if not p:
-        sys.exit(f"Apple no tiene un precio de {spain_price} EUR en España para suscripciones")
+        sys.exit(f"Apple no tiene un precio de {spain_price} en {territory} para suscripciones")
     return p["id"]
 
 
@@ -606,24 +612,28 @@ def subscription_prices(bundle, product, spain_price):
     return out
 
 
-def set_subscription_price(bundle, product, spain_price, dry):
+def set_subscription_price(bundle, product, spain_price, dry, usa_price=None, initial=False):
     """New price of an existing subscription from the day after tomorrow: Spain at `spain_price` and the equalized
     price in every other territory, China included (see subscription()). Current subscribers keep
     theirs (`preserveCurrentPrice`), so nobody has to consent to a raise. Once approved, a price
-    without `startDate` is refused (409 "Initial price cannot be created again"), and today too."""
+    without `startDate` is refused (409 "Initial price cannot be created again"), and today too.
+    `initial`: the subscription was never approved, so the price replaces the initial one, without a start date."""
     sid = _subscription_id(bundle, product)
     point = _spain_point(sid, spain_price)
     prices = {"ESP": point}
     prices.update({t: pp for t, (pp, _) in _equalized(point).items()})
+    if usa_price:
+        prices["USA"] = _spain_point(sid, usa_price, "USA")
     print(f"  {product}: {spain_price} EUR en ESP, {len(prices)} territorios")
     if dry:
         return
     # Two days ahead: by the Spanish afternoon Apple no longer takes tomorrow (2-11 at 17:30: "must be
     # on or after" the 4th)
     start = time.strftime("%Y-%m-%d", time.localtime(time.time() + 2 * 86400))
+    attrs = {} if initial else {"startDate": start, "preserveCurrentPrice": True}
     for t, pp in prices.items():
-        api("POST", "/v1/subscriptionPrices", {"data": {"type": "subscriptionPrices", "attributes": {
-            "startDate": start, "preserveCurrentPrice": True}, "relationships": {
+        api("POST", "/v1/subscriptionPrices", {"data": {"type": "subscriptionPrices", "attributes": attrs,
+            "relationships": {
             "subscription": {"data": {"type": "subscriptions", "id": sid}},
             "subscriptionPricePoint": {"data": {"type": "subscriptionPricePoints", "id": pp}},
             "territory": {"data": {"type": "territories", "id": t}}}}})
