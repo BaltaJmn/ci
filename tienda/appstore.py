@@ -462,6 +462,23 @@ def enviar(bundle, dry):
     api("PATCH", f"/v1/reviewSubmissions/{s['id']}", {"data": {"type": "reviewSubmissions", "id": s["id"],
                                                                "attributes": {"submitted": True}}})
     print(f"  {v['attributes']['versionString']}: enviada a revisión")
+    enviar_suscripciones(a)
+
+
+def enviar_suscripciones(app_id):
+    """Subscriptions still READY_TO_SUBMIT (a new plan in a group that already has an approved one, like the yearly of
+    17-11) go to review next to the version. A group's first subscription is refused here: that one goes in the
+    web draft with the version (MANUAL-PUBLICAR)."""
+    for g in get_all(f"/v1/apps/{app_id}/subscriptionGroups"):
+        for sub in get_all(f"/v1/subscriptionGroups/{g['id']}/subscriptions"):
+            if sub["attributes"]["state"] != "READY_TO_SUBMIT":
+                continue
+            try:
+                api("POST", "/v1/subscriptionSubmissions", {"data": {"type": "subscriptionSubmissions", "relationships": {
+                    "subscription": {"data": {"type": "subscriptions", "id": sub["id"]}}}}})
+                print(f"  {sub['attributes']['productId']}: a revisión con la versión")
+            except SystemExit as e:
+                print(f"  {sub['attributes']['productId']}: no se envía sola ({str(e)[:160]})")
 
 
 def purchase(bundle, product):

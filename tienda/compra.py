@@ -138,10 +138,29 @@ def anual(package, play_product, asc_product, price, monthly, trial, dry):
         r = A2.get(t)
         if r in prices and prices[r]["currencyCode"] == currency:
             prices[r] = play.money(amount, currency)
+    anual_play(package, play_product, price, trial, dry, prices, {PLAY_LOCALE.get(l, l): t for l, t in texts.items()})
+
+
+def anual_play(package, play_product, price, trial, dry, prices=None, texts=None, monthly="pro_monthly"):
+    """The Play half of anual(), runnable while App Store Connect is down: without `texts` they come from the Play
+    monthly subscription, without `prices` Play's own conversion of the Spanish price. anual() later finds the
+    product and the offer already there and leaves them alone."""
+    if texts is None:
+        m = play.call("GET", f"{play.API}{package}/subscriptions/{monthly}")
+        texts = {}
+        for l in m["listings"]:
+            word = next((w for w in YEARLY if w in l["title"]), None)
+            if word:
+                texts[l["languageCode"]] = (l["title"].replace(word, YEARLY[word]), l["description"])
+            else:
+                print(f"  {l['languageCode']}: sin palabra de 'mensual' en {l['title']!r}, se queda fuera")
+    if prices is None:
+        prices = play.convert(package, play.money(float(price) / 1.21, "EUR"))
     prices["ES"] = play.money(price, "EUR")
     prices["US"] = play.money(price, "USD")
-    ptexts = {PLAY_LOCALE.get(l, l): t for l, t in texts.items()}
-    play.suscripcion(package, play_product, "yearly", prices, ptexts, dry, period="P1Y")
+    play.suscripcion(package, play_product, "yearly", prices, texts, dry, period="P1Y")
+    if dry:
+        return
     play.oferta_prueba(package, play_product, "yearly", f"P{trial}D", dry)
 
 
@@ -159,6 +178,10 @@ if __name__ == "__main__":
     if "--precio-suscripcion" in sys.argv:
         a = [x for x in sys.argv[1:] if not x.startswith("--")]
         precio_suscripcion(*a[:4], "--dry" in sys.argv)
+        sys.exit()
+    if "--anual-play" in sys.argv:
+        a = [x for x in sys.argv[1:] if not x.startswith("--")]
+        anual_play(a[0], a[1], a[2], a[3], "--dry" in sys.argv)
         sys.exit()
     if "--anual" in sys.argv:
         a = [x for x in sys.argv[1:] if not x.startswith("--")]
