@@ -39,7 +39,7 @@ def items(app, path):
     return out
 
 
-def suscripcion(app, package, play_product, base_plan, dry):
+def suscripcion(app, package, play_product, base_plan, dry, pkg="$rc_monthly", label="Monthly", position=2):
     p = items(app, "/projects")[0]["id"]
     apps = items(app, f"/projects/{p}/apps")
     stores = {"play_store": f"{play_product}:{base_plan}", "app_store": f"{package}.{play_product}"}
@@ -54,7 +54,7 @@ def suscripcion(app, package, play_product, base_plan, dry):
         if not prod and not dry:
             prod = call(app, "POST", f"/projects/{p}/products", {
                 "store_identifier": ident, "app_id": a["id"], "type": "subscription",
-                "display_name": f"Pro monthly ({a['type']})"})
+                "display_name": f"Pro {label.lower()} ({a['type']})"})
         if prod:
             ids.append(prod["id"])
     if dry:
@@ -65,17 +65,17 @@ def suscripcion(app, package, play_product, base_plan, dry):
     if new:
         call(app, "POST", f"/projects/{p}/entitlements/{ent['id']}/actions/attach_products", {"product_ids": new})
     off = next(o for o in items(app, f"/projects/{p}/offerings") if o["lookup_key"] == "default")
-    pack = next((k for k in items(app, f"/projects/{p}/offerings/{off['id']}/packages") if k["lookup_key"] == "$rc_monthly"), None)
+    pack = next((k for k in items(app, f"/projects/{p}/offerings/{off['id']}/packages") if k["lookup_key"] == pkg), None)
     if not pack:
         pack = call(app, "POST", f"/projects/{p}/offerings/{off['id']}/packages",
-                    {"lookup_key": "$rc_monthly", "display_name": "Monthly", "position": 2})
+                    {"lookup_key": pkg, "display_name": label, "position": position})
     have = {x["product"]["product_id"] if "product" in x else x.get("product_id") for x in
             items(app, f"/projects/{p}/packages/{pack['id']}/products")}
     new = [i for i in ids if i not in have]
     if new:
         call(app, "POST", f"/projects/{p}/packages/{pack['id']}/actions/attach_products",
              {"products": [{"product_id": i, "eligibility_criteria": "all"} for i in new]})
-    print(f"  {app}: producto(s) en `pro` y en $rc_monthly de `default`")
+    print(f"  {app}: producto(s) en `pro` y en {pkg} de `default`")
 
 
 if __name__ == "__main__":

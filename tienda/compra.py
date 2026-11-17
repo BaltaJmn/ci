@@ -23,6 +23,9 @@ New subscription price: `compra.py --precio-suscripcion <package> <Play subscrip
 <price> [--dry]`, for new subscribers only (Play from now, App Store from tomorrow, the earliest Apple
 takes), with the same equalization as above.
 
+Yearly: `compra.py --anual <package> <Play subscription> <App Store product> <price> <monthly App Store product>
+<trial days: 7 or 3> [--dry]` adds the yearly plan next to the monthly one, in both stores, with a free trial.
+
 The bundle id is the package name, as in the whole family. `--dry` prints and changes nothing;
 `--solo-play` leaves the App Store as it is (a purchase in review, whose notes quote its price).
 """
@@ -101,6 +104,47 @@ def suscripcion(package, play_product, asc_product, price, lifetime, translation
     play.suscripcion(package, play_product, "monthly", prices, ptexts, dry)
 
 
+# The monthly subscription's own word for "monthly" in each locale, and the yearly one that replaces it.
+YEARLY = {"monthly": "yearly", "mensual": "anual", "mensal": "anual", "mensile": "annuale", "mensuel": "annuel",
+          "monatlich": "jährlich", "maandelijks": "jaarlijks", "miesięcznie": "rocznie", "aylık": "yıllık",
+          "bulanan": "tahunan", "в месяц": "в год", "मासिक": "वार्षिक", "月額": "年額", "월간": "연간",
+          "每月": "每年", "月度": "年度", "按月": "按年", "hàng tháng": "hàng năm", "شهري": "سنوي"}
+
+
+def anual(package, play_product, asc_product, price, monthly, trial, dry):
+    """The yearly subscription next to the monthly one, in both stores: App Store group Pro (level 2), Play
+    subscription `play_product` with base plan `yearly`; Spain at `price` EUR and the United States at `price`
+    USD; texts from the monthly subscription with its word for "monthly" turned into "yearly"; a free trial of
+    `trial` days (App Store ONE_WEEK or THREE_DAYS, Play P7D or P3D) for new subscribers."""
+    sid = appstore._subscription_id(package, monthly)
+    texts = {}
+    for l in appstore.get_all(f"/v1/subscriptions/{sid}/subscriptionLocalizations"):
+        a = l["attributes"]
+        word = next((w for w in YEARLY if w in a["name"]), None)
+        if not word:
+            print(f"  {a['locale']}: sin palabra de 'mensual' en {a['name']!r}, se queda fuera")
+            continue
+        texts[a["locale"]] = (a["name"].replace(word, YEARLY[word]), a["description"])
+    group = texts["en-US"][0].replace(" yearly", "")   # only names group localizations that are missing
+    appstore.subscription(package, asc_product, texts["en-US"][0], group, texts, price, dry, period="ONE_YEAR",
+                          level=2, usa_price=price)
+    apple = {"7": "ONE_WEEK", "3": "THREE_DAYS"}[trial]
+    if dry:
+        print(f"  {asc_product}: prueba {apple}; Play {play_product}/yearly con prueba P{trial}D")
+        return
+    appstore.intro_trial(package, asc_product, apple, dry)
+    prices = play.convert(package, play.money(float(price) / 1.21, "EUR"))
+    for t, (amount, currency) in appstore.subscription_prices(package, asc_product, price).items():
+        r = A2.get(t)
+        if r in prices and prices[r]["currencyCode"] == currency:
+            prices[r] = play.money(amount, currency)
+    prices["ES"] = play.money(price, "EUR")
+    prices["US"] = play.money(price, "USD")
+    ptexts = {PLAY_LOCALE.get(l, l): t for l, t in texts.items()}
+    play.suscripcion(package, play_product, "yearly", prices, ptexts, dry, period="P1Y")
+    play.oferta_prueba(package, play_product, "yearly", f"P{trial}D", dry)
+
+
 def precio_suscripcion(package, play_product, asc_product, price, dry):
     appstore.set_subscription_price(package, asc_product, price, dry)
     prices = play.convert(package, play.money(float(price) / 1.21, "EUR"))
@@ -115,6 +159,10 @@ if __name__ == "__main__":
     if "--precio-suscripcion" in sys.argv:
         a = [x for x in sys.argv[1:] if not x.startswith("--")]
         precio_suscripcion(*a[:4], "--dry" in sys.argv)
+        sys.exit()
+    if "--anual" in sys.argv:
+        a = [x for x in sys.argv[1:] if not x.startswith("--")]
+        anual(a[0], a[1], a[2], a[3], a[4], a[5], "--dry" in sys.argv)
         sys.exit()
     if "--suscripcion" in sys.argv:
         a = [x for x in sys.argv[1:] if not x.startswith("--")]

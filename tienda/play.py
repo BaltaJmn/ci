@@ -278,8 +278,8 @@ def compra(package, product, prices, listings, dry):
     print(f"  {product}: guardado en Play")
 
 
-def suscripcion(package, product, base_plan, prices, listings, dry):
-    """A monthly auto-renewing subscription with one base plan. `prices` and `listings` as in compra().
+def suscripcion(package, product, base_plan, prices, listings, dry, period="P1M"):
+    """An auto-renewing subscription (monthly unless `period`, ISO 8601) with one base plan. `prices` and `listings` as in compra().
     Created and its base plan activated if the product does not exist; an existing one is left alone."""
     ref = call("GET", f"{API}{package}/oneTimeProducts")["oneTimeProducts"][0]
     regions = [r["regionCode"] for r in ref["purchaseOptions"][0]["regionalPricingAndAvailabilityConfigs"]]
@@ -293,7 +293,7 @@ def suscripcion(package, product, base_plan, prices, listings, dry):
                          for l, (t, d) in sorted(listings.items())],
             "basePlans": [{"basePlanId": base_plan,
                            "autoRenewingBasePlanType": {
-                               "billingPeriodDuration": "P1M", "gracePeriodDuration": "P7D",
+                               "billingPeriodDuration": period, "gracePeriodDuration": "P7D",
                                "accountHoldDuration": "P30D", "resubscribeState": "RESUBSCRIBE_STATE_ACTIVE",
                                "prorationMode": "SUBSCRIPTION_PRORATION_MODE_CHARGE_ON_NEXT_BILLING_DATE",
                                "legacyCompatible": False},
@@ -313,6 +313,33 @@ def suscripcion(package, product, base_plan, prices, listings, dry):
     call("POST", f"{API}{package}/subscriptions?productId={product}&regionsVersion.version={version}", body)
     call("POST", f"{API}{package}/subscriptions/{product}/basePlans/{base_plan}:activate", {})
     print(f"  {product}: creada y activa en Play")
+
+
+def oferta_prueba(package, product, base_plan, duration, dry, offer="free-trial"):
+    """A free trial (`duration`, ISO 8601: P3D, P7D) on a base plan, for people who never subscribed to anything in the
+    app, in every region of the base plan and the ones Play opens later. Left alone if the offer exists."""
+    version = call("GET", f"{API}{package}/oneTimeProducts")["oneTimeProducts"][0]["regionsVersion"]["version"]
+    s = call("GET", f"{API}{package}/subscriptions/{product}")
+    bp = next(b for b in s["basePlans"] if b["basePlanId"] == base_plan)
+    regions = [r["regionCode"] for r in bp["regionalConfigs"]]
+    print(f"  {product}/{base_plan}: prueba {duration} en {len(regions)} regiones")
+    if dry:
+        return
+    have = call("GET", f"{API}{package}/subscriptions/{product}/basePlans/{base_plan}/offers").get("subscriptionOffers", [])
+    if any(o["offerId"] == offer for o in have):
+        print(f"  {product}/{base_plan}/{offer}: ya existe, no se toca")
+        return
+    body = {"packageName": package, "productId": product, "basePlanId": base_plan, "offerId": offer,
+            "phases": [{"recurrenceCount": 1, "duration": duration,
+                        "regionalConfigs": [{"regionCode": r, "free": {}} for r in regions],
+                        "otherRegionsConfig": {"free": {}}}],
+            "targeting": {"acquisitionRule": {"scope": {"anySubscriptionInApp": {}}}},
+            "regionalConfigs": [{"regionCode": r, "newSubscriberAvailability": True} for r in regions],
+            "otherRegionsConfig": {"otherRegionsNewSubscriberAvailability": True}}
+    call("POST", f"{API}{package}/subscriptions/{product}/basePlans/{base_plan}/offers?offerId={offer}"
+                 f"&regionsVersion.version={version}", body)
+    call("POST", f"{API}{package}/subscriptions/{product}/basePlans/{base_plan}/offers/{offer}:activate", {})
+    print(f"  {product}/{base_plan}/{offer}: creada y activa")
 
 
 def precio_suscripcion(package, product, base_plan, prices, dry):

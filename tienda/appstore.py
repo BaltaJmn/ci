@@ -605,6 +605,35 @@ def _subscription_id(bundle, product):
                 if s["attributes"]["productId"] == product)
 
 
+def intro_trial(bundle, product, duration, dry):
+    """A free trial (`duration`: THREE_DAYS, ONE_WEEK...) for new subscribers of `product`, in every territory
+    where it is sold. Apple asks one offer per territory (409 "relationship 'territory'" without it); the ones
+    that already have an introductory offer are left alone. No review: it applies at once."""
+    sid = _subscription_id(bundle, product)
+    av = api("GET", f"/v1/subscriptions/{sid}/subscriptionAvailability")["data"]["id"]
+    terr = [t["id"] for t in get_all(f"/v1/subscriptionAvailabilities/{av}/availableTerritories?limit=200")]
+    have = {o["relationships"]["territory"]["data"]["id"] for o in
+            get_all(f"/v1/subscriptions/{sid}/introductoryOffers?include=territory&limit=200")
+            if o.get("relationships", {}).get("territory", {}).get("data")}
+    todo = [t for t in terr if t not in have]
+    print(f"  {product}: prueba {duration} en {len(todo)} de {len(terr)} territorios")
+    if dry:
+        return
+    for t in todo:
+        for tries in range(4):   # Apple answers 500 now and then in a long run (17-11); a retry goes through
+            try:
+                api("POST", "/v1/subscriptionIntroductoryOffers", {"data": {"type": "subscriptionIntroductoryOffers",
+                    "attributes": {"duration": duration, "offerMode": "FREE_TRIAL", "numberOfPeriods": 1},
+                    "relationships": {"subscription": {"data": {"type": "subscriptions", "id": sid}},
+                                      "territory": {"data": {"type": "territories", "id": t}}}}})
+                break
+            except SystemExit as e:
+                if "500" not in str(e) or tries == 3:
+                    raise
+                time.sleep(5)
+    print(f"  {product}: prueba puesta")
+
+
 def subscription_prices(bundle, product, spain_price):
     """What Apple charges per territory for that subscription, to copy it to Play: {ESP: ('0.99', 'EUR'), ...}."""
     out = {t: v for t, (_, v) in _equalized(_spain_point(_subscription_id(bundle, product), spain_price)).items()}

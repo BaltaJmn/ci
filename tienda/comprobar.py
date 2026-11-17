@@ -11,7 +11,8 @@ shows up here and not in Play Console, with the save button dead and no reason g
 import pathlib, struct, sys
 
 PLAY = {"title": 30, "short": 80, "full": 4000}
-# Keywords count bytes, not characters: an accented letter is two.
+# Keywords count characters, like every other field: App Store Connect took 87 Japanese characters (219 bytes)
+# and 99 accented ones (119 bytes) on 17-11-2026. Counting bytes left CJK and Cyrillic fields at a third.
 APPLE = {"name": 30, "subtitle": 30, "keywords": 100, "promo": 170, "description": 4000}
 WHATSNEW = 500
 SCREENSHOT_LOCALES = ("en-US", "es-ES")
@@ -35,7 +36,7 @@ def check(repo):
             for name, top in files.items():
                 p = d / f"{name}.txt"
                 text = p.read_text(encoding="utf-8").strip() if p.exists() else ""
-                n = len(text.encode()) if name == "keywords" else len(text)
+                n = len(text)
                 if not text or n > top:
                     errors.append(f"{p.relative_to(store)}: {n}, el tope es {top}" if text else f"falta {p.relative_to(store)}")
     notes = sorted((store / "whatsnew").glob("whatsnew-*"))
