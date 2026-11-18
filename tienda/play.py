@@ -29,7 +29,7 @@ store/play/feature/<locale>.png, store/screenshots/play/<locale>/*.png and, if i
 store/screenshots/tablet/<locale>/*.png. Purchases: compra.py,
 which gives a purchase the same price and texts in both stores.
 """
-import base64, json, os, pathlib, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
+import base64, json, os, pathlib, re, subprocess, sys, tempfile, time, urllib.error, urllib.parse, urllib.request
 
 API = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
 UPLOAD = "https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/"
@@ -202,8 +202,16 @@ def aab(package, path, track, notes, status="completed", dry=False, ficha_de=Non
     d = d / "store/whatsnew" if (d / "store/whatsnew").is_dir() else d
     notes = [{"language": f.name.removeprefix("whatsnew-"), "text": _read(f)} for f in sorted(d.glob("whatsnew-*"))]
     with Edit(package, dry) as e:
-        vc = call("POST", f"{e.up}/edits/{e.id}/bundles?uploadType=media", data=pathlib.Path(path).read_bytes(),
-                  ctype="application/octet-stream")["versionCode"]
+        try:
+            vc = call("POST", f"{e.up}/edits/{e.id}/bundles?uploadType=media", data=pathlib.Path(path).read_bytes(),
+                      ctype="application/octet-stream")["versionCode"]
+        except SystemExit as err:
+            # Already in the library: it went to a test track first so the console could see its permissions and
+            # show their declaration (Health Connect, 18-11-2026). Play names the code it refuses; that one is used.
+            m = re.search(r"Version code (\d+) has already been used", str(err.code))
+            if not m:
+                raise
+            vc = int(m.group(1))
         print(f"  AAB {'a validar, sin publicar' if dry else 'subido'}: versionCode {vc}")
         if ficha_de:  # production only: see the header
             _ficha(e, ficha_de, imagenes)
