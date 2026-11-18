@@ -78,6 +78,12 @@ def check(repo):
 
 
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--prueba"]:
+        for t in ("gratis", "app free", "Grátis", "gratuïta", "ücretsiz", "za darmo", "бесплатно", "無料", "3,99 €", "$2"):
+            assert PRICE.search(t), t
+        for t in ("ad-free", "Day off", "free-form", "freedom", "gratitude", "registro,fotos"):
+            assert not PRICE.search(t), t
+        sys.exit(print("prueba: todo bien"))
     if len(sys.argv) != 2:
         sys.exit(__doc__)
     locales, errors = check(sys.argv[1])
