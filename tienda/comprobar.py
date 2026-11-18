@@ -8,9 +8,14 @@ and the release notes, every text within its store's limit, the Play icon and En
 graphic, and screenshots for both stores in at least English and Spanish. A text over the limit
 shows up here and not in Play Console, with the save button dead and no reason given.
 """
-import pathlib, struct, sys
+import pathlib, re, struct, sys
 
 PLAY = {"title": 30, "short": 80, "full": 4000}
+# Guideline 2.3.7 (MoodTraker 1.9.0, 18-11-2026): "free" or a price in the App Store metadata is a rejection, and
+# Apple asks for none in any field but the description; Play forbids it in the title. "Ad-free" or "day off" are no price.
+PRICE = re.compile(r"(?<![-\w])(free|gratis|gratu[iï]t\w*|grátis|kostenlos|umsonst|ücretsiz|bedava|darmo\w*|bezpłatn\w*"
+                   r"|бесплатн\w*|безкоштовн\w*|miễn phí|percuma|मुफ्त|मुफ़्त|ฟรี|مجان\w*)(?![-\w])|無料|무료|免费|免費|[$€£¥₩₺₽]", re.I)
+NO_PRICE = ("title", "name", "subtitle", "keywords", "promo")
 # Keywords count characters, like every other field: App Store Connect took 87 Japanese characters (219 bytes)
 # and 99 accented ones (119 bytes) on 17-11-2026. Counting bytes left CJK and Cyrillic fields at a third.
 APPLE = {"name": 30, "subtitle": 30, "keywords": 100, "promo": 170, "description": 4000}
@@ -39,6 +44,8 @@ def check(repo):
                 n = len(text)
                 if not text or n > top:
                     errors.append(f"{p.relative_to(store)}: {n}, el tope es {top}" if text else f"falta {p.relative_to(store)}")
+                if name in NO_PRICE and (m := PRICE.search(text)):
+                    errors.append(f"{p.relative_to(store)}: \"{m.group(0)}\" es precio, solo cabe en la descripcion (2.3.7)")
     notes = sorted((store / "whatsnew").glob("whatsnew-*"))
     locales["notas"] = {p.name.removeprefix("whatsnew-") for p in notes}
     # The generic notes of the weekly train (tren.py), for a week nobody touched store/whatsnew.
