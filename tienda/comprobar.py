@@ -12,10 +12,11 @@ import pathlib, re, struct, sys
 
 PLAY = {"title": 30, "short": 80, "full": 4000}
 # Guideline 2.3.7 (MoodTraker 1.9.0, 18-11-2026): "free" or a price in the App Store metadata is a rejection, and
-# Apple asks for none in any field but the description; Play forbids it in the title. "Ad-free" or "day off" are no price.
+# Apple asks for none in any field but the description; Play forbids it in the title. The Play short description
+# too: it is the second field Play ranks on, and FlowTime's 19 ended in "Free." until 18-11-2026. "Ad-free" or "day off" are no price.
 PRICE = re.compile(r"(?<![-\w])(free|gratis|gratu[iï]t\w*|grátis|kostenlos|umsonst|ücretsiz|bedava|darmo\w*|bezpłatn\w*"
                    r"|бесплатн\w*|безкоштовн\w*|miễn phí|percuma|मुफ्त|मुफ़्त|ฟรี|مجان\w*)(?![-\w])|無料|무료|免费|免費|[$€£¥₩₺₽]", re.I)
-NO_PRICE = ("title", "name", "subtitle", "keywords", "promo")
+NO_PRICE = ("title", "short", "name", "subtitle", "keywords", "promo")
 # Keywords count characters, like every other field: App Store Connect took 87 Japanese characters (219 bytes)
 # and 99 accented ones (119 bytes) on 17-11-2026. Counting bytes left CJK and Cyrillic fields at a third.
 APPLE = {"name": 30, "subtitle": 30, "keywords": 100, "promo": 170, "description": 4000}
