@@ -818,11 +818,12 @@ def cerrar(a, S, res):
     guardar(S)
 
 
-def tick(ya=False):
+def tick(ya=False, solo=None):
+    """`solo`: one app's key, to start (or move on) that one alone; the others are not even looked at."""
     global YA
     YA, t = ya, datetime.datetime.now(MADRID)
-    print(f"--- {t:%Y-%m-%d %H:%M}" + (" (a mano)" if ya else ""))
-    for clave in APPS:
+    print(f"--- {t:%Y-%m-%d %H:%M}" + (" (a mano)" if ya else "") + (f" (solo {solo})" if solo else ""))
+    for clave in ([solo] if solo else APPS):
         a, S = usar(clave), {}
         try:
             S = cargar()
@@ -1028,6 +1029,8 @@ if __name__ == "__main__":
         tick()
     elif a == ["ya"]:
         tick(ya=True)
+    elif len(a) == 2 and a[0] == "ya" and a[1] in APPS:
+        tick(ya=True, solo=a[1])
     elif len(a) == 2 and a[0] == "seco" and a[1] in APPS:
         seco(a[1])
     else:

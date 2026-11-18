@@ -15,7 +15,7 @@ export NTFY_TOPIC=$(secret ntfy-topic) NTFY_TOPIC_APROBAR=$(secret ntfy-topic-ap
 # caffeinate: the Mac does not sleep in the middle of a build.
 case ${1:-} in
   tick) exec lockf -t 0 $T/tren.lock caffeinate -i /usr/bin/python3 $T/ci/tienda/tren.py tick ;;
-  ya) exec lockf -t 7200 $T/tren.lock caffeinate -i /usr/bin/python3 $T/ci/tienda/tren.py ya ;;
+  ya) exec lockf -t 7200 $T/tren.lock caffeinate -i /usr/bin/python3 $T/ci/tienda/tren.py ya ${2:+$2} ;;
   seco) exec lockf -t 7200 $T/tren.lock caffeinate -i env SECO=true /usr/bin/python3 $T/ci/tienda/tren.py seco ${2:?clave} ;;
   *) sed -n '2,5p' $0; exit 1 ;;
 esac
