@@ -23,7 +23,12 @@ if [[ -z ${TESTFLIGHT_LOCKED:-} ]]; then
   export TESTFLIGHT_LOCKED=1
   exec lockf -k /tmp/testflight.lock $0 "$@"
 fi
+HERE=${0:A:h}
 cd "$1"
+# An InfoPlist.xcstrings without English ships the key names as permission texts, and App Review
+# rejects the build automatically (5.1.1, Clearwell 1.7 on 20-11-2026).
+python3 -I $HERE/infoplist_en.py --check . ||
+  { print "Falta el ingles en InfoPlist.xcstrings; lo copia de Info.plist: python3 $HERE/infoplist_en.py $PWD"; exit 1; }
 VERSION_FILE=${2:-androidApp/build.gradle.kts}
 VERSION_NAME=${VERSION_NAME:-$(sed -n -E 's/.*versionName *= *"([^"]+)".*/\1/p' "$VERSION_FILE" | head -1)}
 VERSION_CODE=${VERSION_CODE:-$(sed -n -E 's/.*versionCode *= *([0-9]+).*/\1/p' "$VERSION_FILE" | head -1)}
