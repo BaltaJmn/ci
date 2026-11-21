@@ -356,6 +356,18 @@ def nueva(bundle, number):
         "platform": "IOS", "versionString": number, "releaseType": "AFTER_APPROVAL",
         "copyright": last.get("copyright")}, "relationships": {"app": {"data": {"type": "apps", "id": a}}}}})
     print(f"{bundle}: versión {number} creada")
+    edad(bundle)
+
+
+def edad(bundle):
+    """The age rating questions of 2026 (shared location, dating) answered No on the editable app info:
+    no app has either, and a published app info cannot be edited."""
+    for i in get_all(f"/v1/apps/{app_of(bundle)['id']}/appInfos"):
+        if i["attributes"]["state"] != "READY_FOR_DISTRIBUTION":
+            d = api("GET", f"/v1/appInfos/{i['id']}/ageRatingDeclaration")["data"]["id"]
+            api("PATCH", f"/v1/ageRatingDeclarations/{d}", {"data": {"type": "ageRatingDeclarations", "id": d,
+                "attributes": {"sharedLocation": False, "datingAndRelationships": False}}})
+            print(f"{bundle}: edad respondida")
 
 
 def eventos(bundle, repo, dry):
