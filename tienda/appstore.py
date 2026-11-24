@@ -89,13 +89,16 @@ def api(method, path, body=None):
                                           "Content-Type": "application/json"})
     # Two retries for what passes on its own: a 5xx, or a 409 STATE_ERROR (a build still processing,
     # a submission Apple has not settled yet). Any other 409 is a real conflict and fails at once.
-    for intento in range(3):
+    # A 429 (the hourly request quota, in long runs like precios_pais.py) waits a minute up to ten times.
+    for intento in range(10):
         try:
             with urllib.request.urlopen(req, timeout=120) as r:
                 out = r.read()
             break
         except urllib.error.HTTPError as e:
             cuerpo = e.read().decode(errors="replace")
+            if e.code == 429 and intento < 9:
+                time.sleep(60); continue
             if intento < 2 and (e.code >= 500 or (e.code == 409 and "STATE_ERROR" in cuerpo)):
                 time.sleep(30 * (intento + 1)); continue
             sys.exit(f"{method} {path} -> {e.code}: {cuerpo[:1500]}")
@@ -475,6 +478,23 @@ def enviar(bundle, dry):
                                                                "attributes": {"submitted": True}}})
     print(f"  {v['attributes']['versionString']}: enviada a revisión")
     enviar_suscripciones(a)
+    enviar_compras(a)
+
+
+def enviar_compras(app_id):
+    """One-time purchases READY_TO_SUBMIT (pro_lifetime_offer of 24-11) go to review next to the version that shows them.
+    One without its review screenshot stays: Apple refuses it, and it is said."""
+    for p in get_all(f"/v1/apps/{app_id}/inAppPurchasesV2?limit=50"):
+        if p["attributes"]["state"] == "MISSING_METADATA":
+            print(f"  {p['attributes']['productId']}: AVISO, sin captura o textos: no va a revisión")
+        if p["attributes"]["state"] != "READY_TO_SUBMIT":
+            continue
+        try:
+            api("POST", "/v1/inAppPurchaseSubmissions", {"data": {"type": "inAppPurchaseSubmissions", "relationships": {
+                "inAppPurchaseV2": {"data": {"type": "inAppPurchases", "id": p["id"]}}}}})
+            print(f"  {p['attributes']['productId']}: a revisión con la versión")
+        except SystemExit as e:
+            print(f"  {p['attributes']['productId']}: no se envía ({str(e)[:160]})")
 
 
 def enviar_suscripciones(app_id):
