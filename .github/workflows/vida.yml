@@ -1,4 +1,6 @@
 name: Vida del GK35
+# DESACTIVADO el 24-11-2026 (gh workflow disable): Actions dejo de arrancar por la facturacion y el usuario prefiere no
+# depender de Actions. Lo hace el Mac: gk/servidor/vida-mac.sh con launchd com.baltajmn.vida.
 # Cada 2 h mira el latido del GK35 (gk/servidor/vida.sh: un "vivo" por hora al topic NTFY_VIDA) y, si lleva 3 h sin latir
 # (apagon, cuelgue o sin red), avisa en NTFY_TOPIC. Uno por caida: deja "caido" en el topic del latido y no repite hasta que
 # ntfy.sh lo olvida (12 h). Aqui y no en gk porque en este repo publico las Actions no cuestan.
